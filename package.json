@@ -1,6 +1,7 @@
 {
   "name": "tiktok-bot",
   "version": "1.0.0",
+  "type": "module",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js"
@@ -10,6 +11,6 @@
     "axios": "^1.6.0"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": "18.x"
   }
 }
