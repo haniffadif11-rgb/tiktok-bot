@@ -13,10 +13,10 @@ console.log('🎵 @Mp3titkok_bot AKTIF!');
 // ================== FUNGSI DOWNLOAD GUNA API ==================
 async function downloadTikTokAPI(url) {
     try {
-        // API 1: bliztik.web.id
-        let apiUrl = `https://api.bliztik.web.id/apitiktok?url=${encodeURIComponent(url)}`;
-        let response = await axios.get(apiUrl, { timeout: 30000 });
-        let data = response.data;
+        // API: tikmate.cc (lebih stabil)
+        const apiUrl = `https://tikmate.cc/api/download?url=${encodeURIComponent(url)}`;
+        const response = await axios.get(apiUrl, { timeout: 30000 });
+        const data = response.data;
 
         if (data && data.audio) {
             return {
@@ -29,41 +29,16 @@ async function downloadTikTokAPI(url) {
                 title: data.title || 'TikTok Video'
             };
         } else {
-            // Kalau API 1 gagal, cuba API 2
-            throw new Error('API 1 gagal, cuba API 2');
+            throw new Error('Media tidak dijumpai.');
         }
     } catch (error) {
-        console.log('API 1 gagal, cuba API 2...');
-        
-        try {
-            // API 2: tikmate.cc
-            const apiUrl2 = `https://tikmate.cc/api/download?url=${encodeURIComponent(url)}`;
-            const response2 = await axios.get(apiUrl2, { timeout: 30000 });
-            const data2 = response2.data;
-
-            if (data2 && data2.audio) {
-                return {
-                    audioUrl: data2.audio,
-                    title: data2.title || 'TikTok Audio'
-                };
-            } else if (data2 && data2.video) {
-                return {
-                    videoUrl: data2.video,
-                    title: data2.title || 'TikTok Video'
-                };
-            } else {
-                throw new Error('Media tidak dijumpai.');
-            }
-        } catch (error2) {
-            console.error('API Error:', error2.message);
-            throw new Error('Gagal memproses link. Cuba link lain.');
-        }
+        console.error('API Error:', error.message);
+        throw new Error('Gagal memproses link. Cuba link lain.');
     }
 }
 
 // ================== PERINTAH BOT ==================
 
-// /start
 bot.onText(/\/start/, (msg) => {
     bot.sendMessage(msg.chat.id, `
 🎵 @Mp3titkok_bot
@@ -74,7 +49,6 @@ Hantar link TikTok → dapat MP3
 `);
 });
 
-// /help
 bot.onText(/\/help/, (msg) => {
     bot.sendMessage(msg.chat.id, `
 📖 BANTUAN
@@ -84,7 +58,6 @@ Hantar link TikTok → MP3
 `);
 });
 
-// /mp4 - Download video
 bot.onText(/\/mp4 (.+)/, async (msg, match) => {
     const chatId = msg.chat.id;
     const url = match[1].trim();
@@ -114,12 +87,10 @@ bot.onText(/\/mp4 (.+)/, async (msg, match) => {
     }
 });
 
-// /status
 bot.onText(/\/status/, (msg) => {
     bot.sendMessage(msg.chat.id, `✅ BOT AKTIF\n🕒 ${new Date().toLocaleString()}`);
 });
 
-// ================== HANDLE LINK TIKTOK (AUTO MP3) ==================
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text;
@@ -140,7 +111,6 @@ bot.on('message', async (msg) => {
         }
         await bot.deleteMessage(chatId, status.message_id);
     } catch (error) {
-        console.error('Error:', error.message);
         await bot.editMessageText(
             `❌ Gagal memproses link.\n\nKemungkinan:\n• Video private\n• Link tidak sah\n• Server sibuk`,
             { chat_id: chatId, message_id: status.message_id }
