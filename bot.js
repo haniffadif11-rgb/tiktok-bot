@@ -1,55 +1,45 @@
-const { default: TelegramBot } = require('node-telegram-bot-api');
-const { spawn } = require('child_process');
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
+const TelegramBot = require('node-telegram-bot-api');
+const axios = require('axios');
 
-// ========== TOKEN BOT ==========
-// GANTI DENGAN TOKEN DARI @BotFather
+// ================== TOKEN ==================
 const TOKEN = '8628863096:AAF0eKUbT2B3O2MK7qd5gbCYTqmnijVoFz8';
 
-// ========== BUAT BOT ==========
+// ================== BUAT BOT ==================
 const bot = new TelegramBot(TOKEN, { polling: true });
 
-console.log('✅ BOT AKTIF!');
+console.log('🎵 @Mp3titkok_bot AKTIF!');
 
-// ========== FUNGSI DOWNLOAD ==========
-function downloadTikTok(url, format = 'mp3') {
-    return new Promise((resolve, reject) => {
-        const tmpDir = os.tmpdir();
-        const jobId = Date.now();
-        const ext = format === 'mp3' ? 'mp3' : 'mp4';
-        const outFile = path.join(tmpDir, `${jobId}.${ext}`);
+// ================== FUNGSI DOWNLOAD GUNA API ==================
+async function downloadTikTokAPI(url) {
+    try {
+        const apiUrl = `https://api.bliztik.web.id/apitiktok?url=${encodeURIComponent(url)}`;
+        const response = await axios.get(apiUrl, { timeout: 30000 });
+        const data = response.data;
 
-        let args = [];
-        if (format === 'mp3') {
-            args = ['--extract-audio', '--audio-format', 'mp3', '--audio-quality', '0', '-o', outFile, url];
+        if (data && data.audio) {
+            return {
+                audioUrl: data.audio,
+                title: data.title || 'TikTok Audio'
+            };
+        } else if (data && data.video) {
+            return {
+                videoUrl: data.video,
+                title: data.title || 'TikTok Video'
+            };
         } else {
-            args = ['-f', 'mp4', '-o', outFile, url];
+            throw new Error('Media tidak dijumpai.');
         }
-
-        const ytdlp = spawn('yt-dlp', args);
-        let errorOutput = '';
-
-        ytdlp.stderr.on('data', (data) => {
-            errorOutput += data.toString();
-        });
-
-        ytdlp.on('close', (code) => {
-            if (code !== 0 || !fs.existsSync(outFile)) {
-                return reject(new Error('Gagal muat turun.'));
-            }
-            resolve({ filePath: outFile, fileName: `${jobId}.${ext}` });
-        });
-    });
+    } catch (error) {
+        console.error('API Error:', error.message);
+        throw new Error('Gagal memproses link.');
+    }
 }
 
-// ========== PERINTAH BOT ==========
+// ================== PERINTAH ==================
 
-// /start
 bot.onText(/\/start/, (msg) => {
     bot.sendMessage(msg.chat.id, `
-🎵 BOT TIKTOK MP3
+🎵 @Mp3titkok_bot
 
 Hantar link TikTok → dapat MP3
 /mp4 [link] → dapat MP4
@@ -57,38 +47,42 @@ Hantar link TikTok → dapat MP3
 `);
 });
 
-// /help
 bot.onText(/\/help/, (msg) => {
     bot.sendMessage(msg.chat.id, `
 📖 BANTUAN
-
 Hantar link TikTok → MP3
 /mp4 [link] → MP4
+/status → Cek status
 `);
 });
 
-// /mp4 - Download video
 bot.onText(/\/mp4 (.+)/, async (msg, match) => {
     const chatId = msg.chat.id;
     const url = match[1].trim();
 
     if (!url.includes('tiktok.com')) {
-        return bot.sendMessage(chatId, '❌ Hantar link TikTok sahaja.');
+        return bot.sendMessage(chatId, '❌ Link TikTok sahaja.');
     }
 
     const status = await bot.sendMessage(chatId, '⏳ Memproses video...');
 
     try {
-        const result = await downloadTikTok(url, 'mp4');
-        await bot.sendVideo(chatId, result.filePath, { caption: '🎬 TikTok Video' });
-        fs.unlink(result.filePath, () => {});
+        const result = await downloadTikTokAPI(url);
+        if (result.videoUrl) {
+            await bot.sendVideo(chatId, result.videoUrl, { caption: `🎬 ${result.title}` });
+        } else {
+            throw new Error('Video tidak dijumpai.');
+        }
         await bot.deleteMessage(chatId, status.message_id);
     } catch (error) {
         await bot.editMessageText(`❌ Gagal: ${error.message}`, { chat_id: chatId, message_id: status.message_id });
     }
 });
 
-// Handle link TikTok → MP3
+bot.onText(/\/status/, (msg) => {
+    bot.sendMessage(msg.chat.id, `✅ BOT AKTIF\n🕒 ${new Date().toLocaleString()}`);
+});
+
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text;
@@ -98,9 +92,12 @@ bot.on('message', async (msg) => {
     const status = await bot.sendMessage(chatId, '⏳ Memproses audio...');
 
     try {
-        const result = await downloadTikTok(text, 'mp3');
-        await bot.sendAudio(chatId, result.filePath, { caption: '🎵 TikTok Audio' });
-        fs.unlink(result.filePath, () => {});
+        const result = await downloadTikTokAPI(text);
+        if (result.audioUrl) {
+            await bot.sendAudio(chatId, result.audioUrl, { caption: `🎵 ${result.title}` });
+        } else {
+            throw new Error('Audio tidak dijumpai.');
+        }
         await bot.deleteMessage(chatId, status.message_id);
     } catch (error) {
         await bot.editMessageText(`❌ Gagal: ${error.message}`, { chat_id: chatId, message_id: status.message_id });
