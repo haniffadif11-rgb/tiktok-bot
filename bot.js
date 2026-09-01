@@ -3,7 +3,7 @@ const axios = require('axios');
 const express = require('express');
 
 // ================== TOKEN ==================
-const TOKEN = '8628863096:AAF0eKUbT2B3O2MK7qd5gbCYTqmnijVoFz8';
+const TOKEN = '8823917633:AAE5uhfmXJNrRFBi4-emN8Er2jiXhnFO6oc';
 
 // ================== BUAT BOT ==================
 const bot = new TelegramBot(TOKEN, { polling: true });
