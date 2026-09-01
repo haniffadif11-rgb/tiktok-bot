@@ -3,6 +3,7 @@ const axios = require('axios');
 const express = require('express');
 
 // ================== TOKEN ==================
+// GANTI DENGAN TOKEN DARI @BotFather
 const TOKEN = '8823917633:AAE5uhfmXJNrRFBi4-emN8Er2jiXhnFO6oc';
 
 // ================== BUAT BOT ==================
@@ -13,7 +14,7 @@ console.log('🎵 @Mp3titkok_bot AKTIF!');
 // ================== FUNGSI DOWNLOAD GUNA API ==================
 async function downloadTikTokAPI(url) {
     try {
-        // API: tikmate.cc (lebih stabil)
+        // API: tikmate.cc (stabil)
         const apiUrl = `https://tikmate.cc/api/download?url=${encodeURIComponent(url)}`;
         const response = await axios.get(apiUrl, { timeout: 30000 });
         const data = response.data;
@@ -39,6 +40,7 @@ async function downloadTikTokAPI(url) {
 
 // ================== PERINTAH BOT ==================
 
+// /start
 bot.onText(/\/start/, (msg) => {
     bot.sendMessage(msg.chat.id, `
 🎵 @Mp3titkok_bot
@@ -49,6 +51,7 @@ Hantar link TikTok → dapat MP3
 `);
 });
 
+// /help
 bot.onText(/\/help/, (msg) => {
     bot.sendMessage(msg.chat.id, `
 📖 BANTUAN
@@ -58,6 +61,7 @@ Hantar link TikTok → MP3
 `);
 });
 
+// /mp4 - Download video
 bot.onText(/\/mp4 (.+)/, async (msg, match) => {
     const chatId = msg.chat.id;
     const url = match[1].trim();
@@ -87,10 +91,12 @@ bot.onText(/\/mp4 (.+)/, async (msg, match) => {
     }
 });
 
+// /status
 bot.onText(/\/status/, (msg) => {
     bot.sendMessage(msg.chat.id, `✅ BOT AKTIF\n🕒 ${new Date().toLocaleString()}`);
 });
 
+// ================== HANDLE LINK TIKTOK (AUTO MP3) ==================
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text;
