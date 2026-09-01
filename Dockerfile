@@ -1,11 +1,14 @@
 FROM node:18-slim
 
+# Install dependencies untuk yt-dlp
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     python3 \
+    python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip3 install yt-dlp
+# Install yt-dlp
+RUN pip3 install yt-dlp --no-cache-dir
 
 WORKDIR /app
 
