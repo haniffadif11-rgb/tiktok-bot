@@ -1,5 +1,6 @@
 const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
+const express = require('express');
 
 // ================== TOKEN ==================
 const TOKEN = '8628863096:AAF0eKUbT2B3O2MK7qd5gbCYTqmnijVoFz8';
@@ -35,8 +36,9 @@ async function downloadTikTokAPI(url) {
     }
 }
 
-// ================== PERINTAH ==================
+// ================== PERINTAH BOT ==================
 
+// /start
 bot.onText(/\/start/, (msg) => {
     bot.sendMessage(msg.chat.id, `
 🎵 @Mp3titkok_bot
@@ -47,6 +49,7 @@ Hantar link TikTok → dapat MP3
 `);
 });
 
+// /help
 bot.onText(/\/help/, (msg) => {
     bot.sendMessage(msg.chat.id, `
 📖 BANTUAN
@@ -56,6 +59,7 @@ Hantar link TikTok → MP3
 `);
 });
 
+// /mp4 - Download video
 bot.onText(/\/mp4 (.+)/, async (msg, match) => {
     const chatId = msg.chat.id;
     const url = match[1].trim();
@@ -79,10 +83,12 @@ bot.onText(/\/mp4 (.+)/, async (msg, match) => {
     }
 });
 
+// /status
 bot.onText(/\/status/, (msg) => {
     bot.sendMessage(msg.chat.id, `✅ BOT AKTIF\n🕒 ${new Date().toLocaleString()}`);
 });
 
+// ================== HANDLE LINK TIKTOK (AUTO MP3) ==================
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text;
@@ -102,6 +108,18 @@ bot.on('message', async (msg) => {
     } catch (error) {
         await bot.editMessageText(`❌ Gagal: ${error.message}`, { chat_id: chatId, message_id: status.message_id });
     }
+});
+
+// ================== FAKE WEB SERVER UNTUK RENDER ==================
+const app = express();
+const port = process.env.PORT || 10000;
+
+app.get('/', (req, res) => {
+    res.send('🎵 @Mp3titkok_bot is running!');
+});
+
+app.listen(port, () => {
+    console.log(`Fake web server running on port ${port}`);
 });
 
 console.log('✅ @Mp3titkok_bot siap!');
