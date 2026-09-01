@@ -4,18 +4,18 @@ const express = require('express');
 
 // ================== TOKEN ==================
 // GANTI DENGAN TOKEN DARI @BotFather
-const TOKEN = '8823917633:AAE5uhfmXJNrRFBI4-emN8Er2jiXhnFO6oc';
+const TOKEN = '8823917633:AAE5uhfmXJNrRFBi4-emN8Er2jiXhnFO6oc';
 
 // ================== BUAT BOT ==================
 const bot = new TelegramBot(TOKEN, { polling: true });
 
 console.log('🎵 @Mp3titkok_bot AKTIF!');
 
-// ================== FUNGSI DOWNLOAD GUNA API SSSTIK ==================
+// ================== FUNGSI DOWNLOAD GUNA API TIKWM (FULL) ==================
 async function downloadTikTokAPI(url) {
     try {
-        // API SSSTIK (paling stabil sekarang)
-        const apiUrl = `https://api.ssstik.com/api/download?url=${encodeURIComponent(url)}`;
+        // API TikWM
+        const apiUrl = `https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`;
         const response = await axios.get(apiUrl, { 
             timeout: 30000,
             headers: {
@@ -24,32 +24,44 @@ async function downloadTikTokAPI(url) {
         });
         const data = response.data;
 
-        console.log('API Response:', JSON.stringify(data).substring(0, 200));
+        console.log('API Response:', JSON.stringify(data).substring(0, 500));
 
-        // Check pelbagai format response
-        if (data && data.audio) {
+        if (data && data.code === 0 && data.data) {
+            const videoData = data.data;
+            
+            // AUDIO (MP3) - multiple possible sources
+            let audioUrl = null;
+            if (videoData.music) {
+                audioUrl = videoData.music;
+            } else if (videoData.audio) {
+                audioUrl = videoData.audio;
+            } else if (videoData.hd_audio) {
+                audioUrl = videoData.hd_audio;
+            }
+            
+            // VIDEO (MP4) - multiple possible sources
+            let videoUrl = null;
+            if (videoData.play) {
+                videoUrl = videoData.play;
+            } else if (videoData.hd_play) {
+                videoUrl = videoData.hd_play;
+            } else if (videoData.wmplay) {
+                videoUrl = videoData.wmplay;
+            } else if (videoData.nowm) {
+                videoUrl = videoData.nowm;
+            }
+            
+            const title = videoData.title || 'TikTok Media';
+            
+            // Return both if available
             return {
-                audioUrl: data.audio,
-                title: data.title || 'TikTok Audio'
-            };
-        } else if (data && data.video) {
-            return {
-                videoUrl: data.video,
-                title: data.title || 'TikTok Video'
-            };
-        } else if (data && data.url) {
-            return {
-                audioUrl: data.url,
-                title: data.title || 'TikTok Audio'
-            };
-        } else if (data && data.data && data.data.play) {
-            // Format SSSTIK sometimes uses nested data
-            return {
-                audioUrl: data.data.play,
-                title: data.data.title || 'TikTok Audio'
+                audioUrl: audioUrl,
+                videoUrl: videoUrl,
+                title: title,
+                _raw: videoData
             };
         } else {
-            throw new Error('Media tidak dijumpai dalam response.');
+            throw new Error('API returned error: ' + (data.msg || 'Unknown error'));
         }
     } catch (error) {
         console.error('API Error:', error.message);
@@ -80,7 +92,7 @@ Hantar link TikTok → MP3
 `);
 });
 
-// /mp4 - Download video
+// /mp4 - Download video (UPDATED)
 bot.onText(/\/mp4 (.+)/, async (msg, match) => {
     const chatId = msg.chat.id;
     const url = match[1].trim();
@@ -93,13 +105,31 @@ bot.onText(/\/mp4 (.+)/, async (msg, match) => {
 
     try {
         const result = await downloadTikTokAPI(url);
-        if (result.videoUrl) {
-            await bot.sendVideo(chatId, result.videoUrl, { 
+        
+        // Try multiple video sources
+        let videoUrl = result.videoUrl;
+        
+        // If no video, try to get from raw data
+        if (!videoUrl && result._raw) {
+            const raw = result._raw;
+            videoUrl = raw.play || raw.hd_play || raw.wmplay || raw.nowm;
+        }
+        
+        if (videoUrl) {
+            await bot.sendVideo(chatId, videoUrl, { 
                 caption: `🎬 ${result.title}`,
                 supports_streaming: true
             });
         } else {
-            throw new Error('Video tidak dijumpai.');
+            // If no video, try to send audio as fallback
+            if (result.audioUrl) {
+                await bot.sendAudio(chatId, result.audioUrl, { 
+                    caption: `🎵 ${result.title} (Video tidak tersedia, audio sahaja)`,
+                    title: result.title
+                });
+            } else {
+                throw new Error('Video tidak dijumpai.');
+            }
         }
         await bot.deleteMessage(chatId, status.message_id);
     } catch (error) {
@@ -126,8 +156,18 @@ bot.on('message', async (msg) => {
 
     try {
         const result = await downloadTikTokAPI(text);
-        if (result.audioUrl) {
-            await bot.sendAudio(chatId, result.audioUrl, { 
+        
+        // Try multiple audio sources
+        let audioUrl = result.audioUrl;
+        
+        // If no audio, try to get from raw data
+        if (!audioUrl && result._raw) {
+            const raw = result._raw;
+            audioUrl = raw.music || raw.audio || raw.hd_audio;
+        }
+        
+        if (audioUrl) {
+            await bot.sendAudio(chatId, audioUrl, { 
                 caption: `🎵 ${result.title}`,
                 title: result.title
             });
