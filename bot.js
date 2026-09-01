@@ -2,7 +2,7 @@ const { default: TelegramBot } = require('node-telegram-bot-api');
 const axios = require('axios');
 const express = require('express');
 
-// ================== TOKEN ==================
+// ================== TOKEN BOT ==================
 // GANTI DENGAN TOKEN DARI @BotFather
 const TOKEN = '8823917633:AAE5uhfmXJNrRFBi4-emN8Er2jiXhnFO6oc';
 
