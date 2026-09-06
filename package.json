@@ -6,12 +6,10 @@
     "start": "node bot.js"
   },
   "dependencies": {
-    "@sendgrid/mail": "^8.1.6",
+    "node-telegram-bot-api": "^0.64.0",
     "axios": "^1.6.0",
     "express": "^4.18.2",
-    "hybrid-ytdl": "^1.0.0",
-    "node-telegram-bot-api": "^0.64.0",
-    "nodemailer": "^6.9.7"
+    "hybrid-ytdl": "^1.0.0"
   },
   "engines": {
     "node": "18.x"
