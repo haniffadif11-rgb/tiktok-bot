@@ -5,6 +5,7 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { getVideoInfo } = require('@natsu.darkcore/ytdl-darkcore');
 
 // ================== TOKEN ==================
 const TOKEN = process.env.TOKEN || '8823917633:AAECyeZnDmIKGWzucHscYnprvfe_P92hl4k';
@@ -19,7 +20,7 @@ const BOT_IMAGE = 'https://ibb.co/gZgrYtnP';
 // ================== BUAT BOT ==================
 const bot = new TelegramBot(TOKEN, { polling: true });
 
-console.log('🎵 @Mp3titkok_bot AKTIF! (Vernux Project - yt-dlp)');
+console.log('🎵 @Mp3titkok_bot AKTIF! (Vernux Project - YouTube Cepat)');
 
 // ================== FUNGSI TIKTOK ==================
 async function downloadTikTok(url, format = 'mp3') {
@@ -95,64 +96,49 @@ async function downloadTikTok(url, format = 'mp3') {
     throw new Error('Semua API TikTok gagal. Cuba link lain.');
 }
 
-// ================== FUNGSI YOUTUBE (YT-DLP) ==================
+// ================== FUNGSI YOUTUBE (CEPAT - PAUTAN TERUS) ==================
 async function downloadYouTube(url, format = 'mp3') {
-    return new Promise((resolve, reject) => {
-        const tmpDir = os.tmpdir();
-        const jobId = Date.now();
-        const ext = format === 'mp3' ? 'mp3' : 'mp4';
-        const outFile = path.join(tmpDir, `${jobId}.${ext}`);
+    try {
+        // Extract video ID
+        const videoId = url.split('v=')[1]?.split('&')[0];
+        if (!videoId) throw new Error('URL tidak sah.');
 
-        let args = [
-            '--no-check-certificate',
-            '--no-warnings',
-            '--quiet',
-            '--no-playlist'
-        ];
+        // Get video info from YouTube API
+        const info = await getVideoInfo(videoId);
+        console.log('✅ YouTube Info:', info.title);
+
+        let downloadUrl = null;
+        let title = info.title || 'YouTube';
 
         if (format === 'mp3') {
-            args = args.concat([
-                '--extract-audio',
-                '--audio-format', 'mp3',
-                '--audio-quality', '0',
-                '-o', outFile,
-                url
-            ]);
+            // Get best audio
+            const audioFormat = info.bestAudio;
+            if (audioFormat) {
+                downloadUrl = audioFormat.url;
+                title = info.title || 'YouTube Audio';
+            }
         } else {
-            args = args.concat([
-                '-f', 'mp4',
-                '-o', outFile,
-                url
-            ]);
+            // Get video (720p)
+            const videoFormat = info.formats.find(f => f.qualityLabel === '720p');
+            if (videoFormat) {
+                downloadUrl = videoFormat.url;
+                title = info.title || 'YouTube Video';
+            }
         }
 
-        console.log(`⚡ Running yt-dlp for ${format}...`);
-        const ytdlp = spawn('yt-dlp', args);
-        let errorOutput = '';
+        if (!downloadUrl) {
+            throw new Error('Format tidak dijumpai.');
+        }
 
-        ytdlp.stderr.on('data', (data) => {
-            errorOutput += data.toString();
-        });
-
-        ytdlp.on('close', (code) => {
-            if (code !== 0 || !fs.existsSync(outFile)) {
-                console.error('yt-dlp error:', errorOutput);
-                return reject(new Error('Gagal muat turun. Cuba link lain.'));
-            }
-
-            const fileSize = fs.statSync(outFile).size;
-            if (fileSize < 10000) {
-                fs.unlinkSync(outFile);
-                return reject(new Error('File terlalu kecil/rosak.'));
-            }
-
-            resolve({
-                filePath: outFile,
-                isUrl: false,
-                title: 'YouTube'
-            });
-        });
-    });
+        return {
+            filePath: downloadUrl,
+            isUrl: true,
+            title: title
+        };
+    } catch (error) {
+        console.error('YouTube Error:', error.message);
+        throw new Error('Gagal mendapatkan pautan muat turun. Cuba lagi.');
+    }
 }
 
 // ================== URL CHECKER ==================
@@ -572,7 +558,7 @@ bot.on('callback_query', async (query) => {
 🕒 ${new Date().toLocaleString()}
 
 🎵 TikTok: ✅
-🎬 YouTube: ✅ (yt-dlp)
+🎬 YouTube: ✅ (Cepat - pautan terus)
 🛡️ URL Checker: ✅
 📱 IQC: ✅
 🎵 Lyrics: ✅ (Sylvatica)
@@ -599,7 +585,7 @@ bot.on('callback_query', async (query) => {
 Hantar link TikTok → MP3
 /mp4 [link] → MP4
 
-🎬 YOUTUBE:
+🎬 YOUTUBE (CEPAT!):
 /ytmp3 [link] → MP3
 /ytmp4 [link] → MP4
 
@@ -677,7 +663,7 @@ bot.onText(/\/help/, async (msg) => {
 Hantar link TikTok → MP3
 /mp4 [link] → MP4
 
-🎬 YOUTUBE:
+🎬 YOUTUBE (CEPAT!):
 /ytmp3 [link] → MP3
 /ytmp4 [link] → MP4
 
@@ -737,9 +723,9 @@ bot.onText(/\/mp4 (.+)/, async (msg, match) => {
     }
 });
 
-// ================== PERINTAH YOUTUBE ==================
+// ================== PERINTAH YOUTUBE (CEPAT) ==================
 
-// /ytmp3 - YouTube audio
+// /ytmp3 - YouTube audio (cepat)
 bot.onText(/\/ytmp3 (.+)/, async (msg, match) => {
     const chatId = msg.chat.id;
     const url = match[1].trim();
@@ -748,15 +734,14 @@ bot.onText(/\/ytmp3 (.+)/, async (msg, match) => {
         return bot.sendMessage(chatId, '❌ Hantar link YouTube sahaja.');
     }
 
-    const status = await bot.sendMessage(chatId, '⏳ Memproses audio YouTube... (ini mungkin mengambil masa)');
+    const status = await bot.sendMessage(chatId, '⏳ Memproses audio YouTube... (cepat!)');
 
     try {
         const result = await downloadYouTube(url, 'mp3');
         await bot.sendAudio(chatId, result.filePath, {
-            caption: '🎵 YouTube Audio',
-            title: 'YouTube Audio'
+            caption: `🎵 ${result.title}`,
+            title: result.title
         });
-        fs.unlink(result.filePath, () => {});
         await bot.deleteMessage(chatId, status.message_id);
     } catch (error) {
         await bot.editMessageText(`❌ Gagal: ${error.message}`, {
@@ -766,7 +751,7 @@ bot.onText(/\/ytmp3 (.+)/, async (msg, match) => {
     }
 });
 
-// /ytmp4 - YouTube video
+// /ytmp4 - YouTube video (cepat)
 bot.onText(/\/ytmp4 (.+)/, async (msg, match) => {
     const chatId = msg.chat.id;
     const url = match[1].trim();
@@ -775,15 +760,14 @@ bot.onText(/\/ytmp4 (.+)/, async (msg, match) => {
         return bot.sendMessage(chatId, '❌ Hantar link YouTube sahaja.');
     }
 
-    const status = await bot.sendMessage(chatId, '⏳ Memproses video YouTube... (ini mungkin mengambil masa)');
+    const status = await bot.sendMessage(chatId, '⏳ Memproses video YouTube... (cepat!)');
 
     try {
         const result = await downloadYouTube(url, 'mp4');
         await bot.sendVideo(chatId, result.filePath, {
-            caption: '🎬 YouTube Video',
+            caption: `🎬 ${result.title}`,
             supports_streaming: true
         });
-        fs.unlink(result.filePath, () => {});
         await bot.deleteMessage(chatId, status.message_id);
     } catch (error) {
         await bot.editMessageText(`❌ Gagal: ${error.message}`, {
@@ -1119,7 +1103,7 @@ bot.onText(/\/status/, async (msg) => {
 🕒 ${new Date().toLocaleString()}
 
 🎵 TikTok: ✅
-🎬 YouTube: ✅ (yt-dlp)
+🎬 YouTube: ✅ (Cepat - pautan terus)
 🛡️ URL Checker: ✅
 📱 IQC: ✅
 🎵 Lyrics: ✅ (Sylvatica)
@@ -1165,16 +1149,15 @@ bot.on('message', async (msg) => {
         return;
     }
 
-    // YouTube
+    // YouTube (cepat)
     if (text.includes('youtube.com') || text.includes('youtu.be')) {
-        const status = await bot.sendMessage(chatId, '⏳ Memproses audio YouTube... (ini mungkin mengambil masa)');
+        const status = await bot.sendMessage(chatId, '⏳ Memproses audio YouTube... (cepat!)');
         try {
             const result = await downloadYouTube(text, 'mp3');
             await bot.sendAudio(chatId, result.filePath, {
-                caption: '🎵 YouTube Audio',
-                title: 'YouTube Audio'
+                caption: `🎵 ${result.title}`,
+                title: result.title
             });
-            fs.unlink(result.filePath, () => {});
             await bot.deleteMessage(chatId, status.message_id);
         } catch (error) {
             await bot.editMessageText(`❌ Gagal: ${error.message}`, {
@@ -1191,7 +1174,7 @@ const app = express();
 const port = process.env.PORT || 10000;
 
 app.get('/', (req, res) => {
-    res.send('🎵 @Mp3titkok_bot is running! (Vernux Project - yt-dlp)');
+    res.send('🎵 @Mp3titkok_bot is running! (Vernux Project - YouTube Cepat)');
 });
 
 app.listen(port, '0.0.0.0', () => {
@@ -1200,7 +1183,7 @@ app.listen(port, '0.0.0.0', () => {
 
 console.log('✅ @Mp3titkok_bot siap!');
 console.log('📌 TikTok: Hantar link → MP3 | /mp4 [link] → MP4');
-console.log('📌 YouTube: /ytmp3 [link] → MP3 | /ytmp4 [link] → MP4 (yt-dlp)');
+console.log('📌 YouTube: /ytmp3 [link] → MP3 | /ytmp4 [link] → MP4 (CEPAT!)');
 console.log('📌 URL Checker: /check [url] → Check malware/phishing');
 console.log('📱 IQC: /iqc "quote" | "sender" | "time" | "battery"');
 console.log('🎵 Lyrics: /lyrics [judul lagu] → Cari lirik (Sylvatica)');
