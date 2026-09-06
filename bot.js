@@ -5,7 +5,7 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { getVideoInfo } = require('@natsu.darkcore/ytdl-darkcore');
+import { getVideoInfo } from '@natsu.darkcore/ytdl-darkcore';
 
 // ================== TOKEN ==================
 const TOKEN = process.env.TOKEN || '8823917633:AAECyeZnDmIKGWzucHscYnprvfe_P92hl4k';
