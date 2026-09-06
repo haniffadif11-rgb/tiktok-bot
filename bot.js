@@ -1,10 +1,8 @@
 const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
 const express = require('express');
-const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 
 // ================== TOKEN ==================
 const TOKEN = process.env.TOKEN || '8823917633:AAECyeZnDmIKGWzucHscYnprvfe_P92hl4k';
@@ -19,7 +17,7 @@ const BOT_IMAGE = 'https://ibb.co/gZgrYtnP';
 // ================== BUAT BOT ==================
 const bot = new TelegramBot(TOKEN, { polling: true });
 
-console.log('🎵 @Mp3titkok_bot AKTIF! (Vernux Project - yt-dlp)');
+console.log('🎵 @Mp3titkok_bot AKTIF! (Vernux Project - Final)');
 
 // ================== FUNGSI TIKTOK ==================
 async function downloadTikTok(url, format = 'mp3') {
@@ -95,79 +93,77 @@ async function downloadTikTok(url, format = 'mp3') {
     throw new Error('Semua API TikTok gagal. Cuba link lain.');
 }
 
-// ================== FUNGSI YOUTUBE (YT-DLP) ==================
+// ================== FUNGSI YOUTUBE (API VEVIOS - FREE & STABIL) ==================
 async function downloadYouTube(url, format = 'mp3') {
-    return new Promise((resolve, reject) => {
-        const tmpDir = os.tmpdir();
-        const jobId = Date.now();
-        const ext = format === 'mp3' ? 'mp3' : 'mp4';
-        const outFile = path.join(tmpDir, `${jobId}.${ext}`);
-
-        let args = [
-            '--no-check-certificate',
-            '--no-warnings',
-            '--quiet',
-            '--no-playlist',
-            '--max-filesize', '100M'
-        ];
-
-        if (format === 'mp3') {
-            args = args.concat([
-                '--extract-audio',
-                '--audio-format', 'mp3',
-                '--audio-quality', '2',
-                '-o', outFile,
-                url
-            ]);
-        } else {
-            args = args.concat([
-                '-f', 'mp4',
-                '-o', outFile,
-                url
-            ]);
+    const API_LIST = [
+        // API 1: Vevioz (free, stabil)
+        {
+            name: 'Vevioz',
+            url: (u, f) => `https://api.vevioz.com/api/button/${f === 'mp3' ? 'mp3' : 'mp4'}/${encodeURIComponent(u)}`,
+            extractor: (data) => {
+                if (data && data.download) {
+                    return {
+                        url: data.download,
+                        title: data.title || 'YouTube'
+                    };
+                }
+                return null;
+            }
+        },
+        // API 2: YT-Downloader (backup)
+        {
+            name: 'YTDownloader',
+            url: (u, f) => `https://yt-downloader.vercel.app/api/download?url=${encodeURIComponent(u)}&type=${f === 'mp3' ? 'audio' : 'video'}`,
+            extractor: (data) => {
+                if (data && data.downloadUrl) {
+                    return {
+                        url: data.downloadUrl,
+                        title: data.title || 'YouTube'
+                    };
+                }
+                return null;
+            }
+        },
+        // API 3: Y2Mate (backup 2)
+        {
+            name: 'Y2Mate',
+            url: (u) => `https://y2mate.com/api/convert?url=${encodeURIComponent(u)}`,
+            extractor: (data) => {
+                if (data && data.downloadUrl) {
+                    return {
+                        url: data.downloadUrl,
+                        title: data.title || 'YouTube'
+                    };
+                }
+                return null;
+            }
         }
+    ];
 
-        console.log(`⚡ Running yt-dlp for ${format}...`);
-        const ytdlp = spawn('yt-dlp', args);
-        let errorOutput = '';
-        let stdoutOutput = '';
-
-        ytdlp.stdout.on('data', (data) => {
-            stdoutOutput += data.toString();
-            console.log('yt-dlp stdout:', data.toString());
-        });
-
-        ytdlp.stderr.on('data', (data) => {
-            errorOutput += data.toString();
-            console.log('yt-dlp stderr:', data.toString());
-        });
-
-        ytdlp.on('close', (code) => {
-            if (code !== 0) {
-                console.error('yt-dlp error code:', code);
-                console.error('yt-dlp error output:', errorOutput);
-                return reject(new Error('Gagal muat turun. Cuba link lain.'));
-            }
-
-            if (!fs.existsSync(outFile)) {
-                console.error('File not found:', outFile);
-                return reject(new Error('File tidak dijumpai selepas download.'));
-            }
-
-            const fileSize = fs.statSync(outFile).size;
-            if (fileSize < 10000) {
-                fs.unlinkSync(outFile);
-                return reject(new Error('File terlalu kecil/rosak.'));
-            }
-
-            console.log(`✅ Download successful: ${outFile} (${fileSize} bytes)`);
-            resolve({
-                filePath: outFile,
-                isUrl: false,
-                title: 'YouTube'
+    for (const api of API_LIST) {
+        try {
+            console.log(`📡 Trying YouTube API: ${api.name}...`);
+            const response = await axios.get(api.url(url, format), {
+                timeout: 30000,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'Accept': 'application/json'
+                }
             });
-        });
-    });
+            const result = api.extractor(response.data);
+            if (result && result.url) {
+                console.log(`✅ YouTube API ${api.name} berjaya!`);
+                return {
+                    filePath: result.url,
+                    isUrl: true,
+                    title: result.title || 'YouTube'
+                };
+            }
+        } catch (error) {
+            console.log(`❌ YouTube API ${api.name} failed: ${error.message}`);
+        }
+    }
+    throw new Error('Semua API YouTube gagal. Cuba link lain.');
 }
 
 // ================== URL CHECKER ==================
@@ -406,6 +402,7 @@ async function getLyrics(query) {
     } catch (error) {
         console.error('Sylvatica Error:', error.response?.data || error.message);
         
+        // Fallback: lyrics.ovh
         console.log('🔄 Sylvatica failed, trying lyrics.ovh...');
         try {
             const parts = query.split(/ - | by | By /i);
@@ -587,7 +584,7 @@ bot.on('callback_query', async (query) => {
 🕒 ${new Date().toLocaleString()}
 
 🎵 TikTok: ✅
-🎬 YouTube: ✅ (yt-dlp)
+🎬 YouTube: ✅ (Vevioz API)
 🛡️ URL Checker: ✅
 📱 IQC: ✅
 🎵 Lyrics: ✅ (Sylvatica)
@@ -763,15 +760,14 @@ bot.onText(/\/ytmp3 (.+)/, async (msg, match) => {
         return bot.sendMessage(chatId, '❌ Hantar link YouTube sahaja.');
     }
 
-    const status = await bot.sendMessage(chatId, '⏳ Memproses audio YouTube... (ini mungkin mengambil masa)');
+    const status = await bot.sendMessage(chatId, '⏳ Memproses audio YouTube...');
 
     try {
         const result = await downloadYouTube(url, 'mp3');
         await bot.sendAudio(chatId, result.filePath, {
-            caption: '🎵 YouTube Audio',
-            title: 'YouTube Audio'
+            caption: `🎵 ${result.title}`,
+            title: result.title
         });
-        fs.unlink(result.filePath, () => {});
         await bot.deleteMessage(chatId, status.message_id);
     } catch (error) {
         await bot.editMessageText(`❌ Gagal: ${error.message}`, {
@@ -790,15 +786,14 @@ bot.onText(/\/ytmp4 (.+)/, async (msg, match) => {
         return bot.sendMessage(chatId, '❌ Hantar link YouTube sahaja.');
     }
 
-    const status = await bot.sendMessage(chatId, '⏳ Memproses video YouTube... (ini mungkin mengambil masa)');
+    const status = await bot.sendMessage(chatId, '⏳ Memproses video YouTube...');
 
     try {
         const result = await downloadYouTube(url, 'mp4');
         await bot.sendVideo(chatId, result.filePath, {
-            caption: '🎬 YouTube Video',
+            caption: `🎬 ${result.title}`,
             supports_streaming: true
         });
-        fs.unlink(result.filePath, () => {});
         await bot.deleteMessage(chatId, status.message_id);
     } catch (error) {
         await bot.editMessageText(`❌ Gagal: ${error.message}`, {
@@ -1134,7 +1129,7 @@ bot.onText(/\/status/, async (msg) => {
 🕒 ${new Date().toLocaleString()}
 
 🎵 TikTok: ✅
-🎬 YouTube: ✅ (yt-dlp)
+🎬 YouTube: ✅ (Vevioz API)
 🛡️ URL Checker: ✅
 📱 IQC: ✅
 🎵 Lyrics: ✅ (Sylvatica)
@@ -1182,14 +1177,13 @@ bot.on('message', async (msg) => {
 
     // YouTube
     if (text.includes('youtube.com') || text.includes('youtu.be')) {
-        const status = await bot.sendMessage(chatId, '⏳ Memproses audio YouTube... (ini mungkin mengambil masa)');
+        const status = await bot.sendMessage(chatId, '⏳ Memproses audio YouTube...');
         try {
             const result = await downloadYouTube(text, 'mp3');
             await bot.sendAudio(chatId, result.filePath, {
-                caption: '🎵 YouTube Audio',
-                title: 'YouTube Audio'
+                caption: `🎵 ${result.title}`,
+                title: result.title
             });
-            fs.unlink(result.filePath, () => {});
             await bot.deleteMessage(chatId, status.message_id);
         } catch (error) {
             await bot.editMessageText(`❌ Gagal: ${error.message}`, {
@@ -1206,7 +1200,7 @@ const app = express();
 const port = process.env.PORT || 10000;
 
 app.get('/', (req, res) => {
-    res.send('🎵 @Mp3titkok_bot is running! (Vernux Project - yt-dlp)');
+    res.send('🎵 @Mp3titkok_bot is running! (Vernux Project - Final)');
 });
 
 app.listen(port, '0.0.0.0', () => {
@@ -1215,7 +1209,7 @@ app.listen(port, '0.0.0.0', () => {
 
 console.log('✅ @Mp3titkok_bot siap!');
 console.log('📌 TikTok: Hantar link → MP3 | /mp4 [link] → MP4');
-console.log('📌 YouTube: /ytmp3 [link] → MP3 | /ytmp4 [link] → MP4 (yt-dlp)');
+console.log('📌 YouTube: /ytmp3 [link] → MP3 | /ytmp4 [link] → MP4 (Vevioz API)');
 console.log('📌 URL Checker: /check [url] → Check malware/phishing');
 console.log('📱 IQC: /iqc "quote" | "sender" | "time" | "battery"');
 console.log('🎵 Lyrics: /lyrics [judul lagu] → Cari lirik (Sylvatica)');
