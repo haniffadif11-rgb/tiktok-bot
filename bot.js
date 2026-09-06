@@ -1,6 +1,11 @@
 const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
 const express = require('express');
+const { spawn } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const { downloadAudio, downloadVideo } = require('hybrid-ytdl');
 
 // ================== TOKEN ==================
 const TOKEN = process.env.TOKEN || '8823917633:AAECyeZnDmIKGWzucHscYnprvfe_P92hl4k';
@@ -14,7 +19,7 @@ const BOT_IMAGE = 'https://ibb.co/gZgrYtnP';
 // ================== BUAT BOT ==================
 const bot = new TelegramBot(TOKEN, { polling: true });
 
-console.log('🎵 @Mp3titkok_bot AKTIF! (Vernux Project - SocialKit API)');
+console.log('🎵 @Mp3titkok_bot AKTIF! (Vernux Project - Final)');
 
 // ================== FUNGSI TIKTOK ==================
 async function downloadTikTok(url, format = 'mp3') {
@@ -90,75 +95,73 @@ async function downloadTikTok(url, format = 'mp3') {
     throw new Error('Semua API TikTok gagal. Cuba link lain.');
 }
 
-// ================== FUNGSI YOUTUBE (SOCIALKIT + FALLBACK) ==================
+// ================== FUNGSI YOUTUBE (HYBRID-YTDL) ==================
 async function downloadYouTube(url, format = 'mp3') {
     try {
-        const apiUrl = `https://api.socialkit.dev/youtube/download?url=${encodeURIComponent(url)}&format=${format === 'mp3' ? 'mp3' : 'mp4'}`;
-        console.log(`📡 Trying SocialKit API: ${apiUrl}`);
-        
-        const response = await axios.get(apiUrl, {
-            timeout: 30000,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Accept': 'application/json'
-            }
-        });
-        
-        const data = response.data;
-        console.log('SocialKit Response:', JSON.stringify(data).substring(0, 300));
-        
-        if (data && data.downloadUrl) {
+        if (format === 'mp3') {
+            const audio = await downloadAudio(url, '128', 'api2');
+            console.log('✅ YouTube Audio source:', audio.source);
             return {
-                filePath: data.downloadUrl,
+                filePath: audio.downloadUrl,
                 isUrl: true,
-                title: data.title || 'YouTube'
-            };
-        } else if (data && data.url) {
-            return {
-                filePath: data.url,
-                isUrl: true,
-                title: data.title || 'YouTube'
-            };
-        } else if (data && data.data && data.data.downloadUrl) {
-            return {
-                filePath: data.data.downloadUrl,
-                isUrl: true,
-                title: data.data.title || 'YouTube'
+                title: audio.title || 'YouTube Audio'
             };
         } else {
-            throw new Error('Link tidak dijumpai dalam response.');
-        }
-    } catch (error) {
-        console.error('SocialKit Error:', error.response?.data || error.message);
-        
-        // Fallback: cuba API lain
-        console.log('🔄 SocialKit failed, trying fallback...');
-        return await downloadYouTubeFallback(url, format);
-    }
-}
-
-// ================== FUNGSI YOUTUBE (FALLBACK) ==================
-async function downloadYouTubeFallback(url, format = 'mp3') {
-    try {
-        const apiUrl = `https://yt-downloader.vercel.app/api/download?url=${encodeURIComponent(url)}&type=${format === 'mp3' ? 'audio' : 'video'}`;
-        const response = await axios.get(apiUrl, {
-            timeout: 30000,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
-        });
-        
-        if (response.data && response.data.downloadUrl) {
+            const video = await downloadVideo(url, '720', 'api2');
+            console.log('✅ YouTube Video source:', video.source);
             return {
-                filePath: response.data.downloadUrl,
+                filePath: video.downloadUrl,
                 isUrl: true,
-                title: response.data.title || 'YouTube'
+                title: video.title || 'YouTube Video'
             };
         }
-        throw new Error('Fallback API gagal.');
     } catch (error) {
-        console.error('Fallback Error:', error.message);
-        throw new Error('Semua API YouTube gagal. Cuba link lain.');
+        console.error('YouTube Error:', error.message);
+        
+        // Fallback: try API 3
+        try {
+            console.log('🔄 Trying fallback API 3...');
+            if (format === 'mp3') {
+                const audio = await downloadAudio(url, '128', 'api3');
+                return {
+                    filePath: audio.downloadUrl,
+                    isUrl: true,
+                    title: audio.title || 'YouTube Audio'
+                };
+            } else {
+                const video = await downloadVideo(url, '720', 'api3');
+                return {
+                    filePath: video.downloadUrl,
+                    isUrl: true,
+                    title: video.title || 'YouTube Video'
+                };
+            }
+        } catch (fallbackError) {
+            console.error('Fallback Error:', fallbackError.message);
+            
+            // Final fallback: try API 1
+            try {
+                console.log('🔄 Trying final fallback API 1...');
+                if (format === 'mp3') {
+                    const audio = await downloadAudio(url, '128', 'api1');
+                    return {
+                        filePath: audio.downloadUrl,
+                        isUrl: true,
+                        title: audio.title || 'YouTube Audio'
+                    };
+                } else {
+                    const video = await downloadVideo(url, '720', 'api1');
+                    return {
+                        filePath: video.downloadUrl,
+                        isUrl: true,
+                        title: video.title || 'YouTube Video'
+                    };
+                }
+            } catch (finalError) {
+                console.error('All APIs failed:', finalError.message);
+                throw new Error('Semua API YouTube gagal. Cuba link lain.');
+            }
+        }
     }
 }
 
@@ -352,111 +355,94 @@ async function stalkTikTok(username) {
     return await stalkTikTokHasData(username);
 }
 
-// ================== FUNGSI LYRICS ==================
-function getLyricsFromVideo(url) {
-    return new Promise((resolve, reject) => {
-        const args = [
-            '--no-check-certificate',
-            '--no-warnings',
-            '--quiet',
-            '--skip-download',
-            '--get-title',
-            '--get-description',
-            url
-        ];
+// ================== FUNGSI LYRICS (LYRICS.OVH) ==================
+async function getLyrics(query) {
+    try {
+        const parts = query.split(/ - | by | By /i);
+        let title = query;
+        let artist = '';
 
-        console.log(`🔍 Extracting lyrics from video...`);
-        const ytdlp = spawn('yt-dlp', args);
-        let output = '';
-        let errorOutput = '';
+        if (parts.length > 1) {
+            title = parts[0].trim();
+            artist = parts[1].trim();
+        }
 
-        ytdlp.stdout.on('data', (data) => {
-            output += data.toString();
-        });
-
-        ytdlp.stderr.on('data', (data) => {
-            errorOutput += data.toString();
-        });
-
-        ytdlp.on('close', (code) => {
-            if (code !== 0) {
-                console.error('yt-dlp error:', errorOutput);
-                return reject(new Error('Gagal extract lyrics.'));
-            }
-
+        // Try with artist + title first
+        if (artist) {
             try {
-                const lines = output.split('\n');
-                let title = lines[0] || 'Unknown';
-                let description = lines.slice(1).join('\n');
+                const response = await axios.get(`https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`, {
+                    timeout: 10000
+                });
                 
-                let lyrics = '';
-                
-                const lyricsMatch = description.match(/[Ll]yrics?[\s:]+([\s\S]*?)(?=\n\n|\n[A-Z]|$)/);
-                if (lyricsMatch) {
-                    lyrics = lyricsMatch[1].trim();
+                if (response.data && response.data.lyrics) {
+                    return {
+                        title: `${title} - ${artist}`,
+                        artist: artist,
+                        lyrics: response.data.lyrics,
+                        source: 'lyrics.ovh'
+                    };
                 }
+            } catch (e) {
+                console.log('❌ lyrics.ovh (with artist) failed');
+            }
+        }
+
+        // Try with just title
+        try {
+            const response = await axios.get(`https://api.lyrics.ovh/v1/${encodeURIComponent(query)}`, {
+                timeout: 10000
+            });
+            
+            if (response.data && response.data.lyrics) {
+                return {
+                    title: query,
+                    artist: 'Unknown',
+                    lyrics: response.data.lyrics,
+                    source: 'lyrics.ovh'
+                };
+            }
+        } catch (e) {
+            console.log('❌ lyrics.ovh (just title) failed');
+        }
+
+        // Fallback: try AZLyrics
+        try {
+            const searchQuery = encodeURIComponent(query + ' lyrics');
+            const searchUrl = `https://www.azlyrics.com/search.php?q=${searchQuery}`;
+            const response = await axios.get(searchUrl, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                },
+                timeout: 10000
+            });
+
+            const html = response.data;
+            const match = html.match(/<div class="lyric">(.*?)<\/div>/s);
+            if (match && match[1]) {
+                const lyrics = match[1]
+                    .replace(/<[^>]+>/g, '')
+                    .replace(/&#x27;/g, "'")
+                    .replace(/&quot;/g, '"')
+                    .replace(/&amp;/g, '&')
+                    .trim();
                 
-                if (!lyrics) {
-                    const lines2 = description.split('\n');
-                    let lyricLines = [];
-                    
-                    for (const line of lines2) {
-                        const trimmed = line.trim();
-                        if (trimmed && !trimmed.includes('http') && 
-                            !trimmed.includes('www') && !trimmed.includes('©') &&
-                            !trimmed.includes('Subscribe') && !trimmed.includes('Follow')) {
-                            lyricLines.push(trimmed);
-                        }
-                    }
-                    
-                    if (lyricLines.length > 3) {
-                        lyrics = lyricLines.join('\n');
-                    }
-                }
-                
-                if (lyrics && lyrics.length > 20) {
-                    resolve({
-                        title: title,
+                if (lyrics && lyrics.length > 50) {
+                    return {
+                        title: query,
                         artist: 'Unknown',
                         lyrics: lyrics,
-                        source: 'yt-dlp'
-                    });
-                } else {
-                    reject(new Error('Lirik tidak dijumpai dalam video.'));
+                        source: 'AZLyrics (fallback)'
+                    };
                 }
-            } catch (error) {
-                console.error('Parse Error:', error.message);
-                reject(new Error('Gagal parse lyrics.'));
             }
-        });
-    });
-}
-
-async function getLyrics(query) {
-    const isYouTube = query.includes('youtube.com') || query.includes('youtu.be');
-    
-    if (isYouTube) {
-        return await getLyricsFromVideo(query);
-    } else {
-        const searchQuery = encodeURIComponent(query + ' lyrics');
-        const searchUrl = `https://www.youtube.com/results?search_query=${searchQuery}`;
-        const searchResponse = await axios.get(searchUrl, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            },
-            timeout: 10000
-        });
-        
-        const html = searchResponse.data;
-        const matches = html.match(/\/watch\?v=([a-zA-Z0-9_-]{11})/g);
-        if (matches && matches.length > 0) {
-            const firstMatch = matches[0];
-            const videoId = firstMatch.split('=')[1];
-            const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-            console.log(`🎵 Found video: ${videoUrl}`);
-            return await getLyricsFromVideo(videoUrl);
+        } catch (e) {
+            console.log('❌ AZLyrics fallback failed');
         }
-        throw new Error('Tiada video dijumpai.');
+
+        throw new Error('Lirik tidak dijumpai. Cuba judul lain.');
+    } catch (error) {
+        console.error('Lyrics Error:', error.message);
+        throw new Error('Gagal mendapatkan lirik. Cuba judul lain.');
     }
 }
 
@@ -578,7 +564,7 @@ bot.on('callback_query', async (query) => {
             await bot.sendMessage(chatId, '📱 iPhone Quote Creator\n\nFormat: /iqc "quote" | "sender" | "time" | "battery"\n\nContoh: /iqc "Hello World!" | "XSO" | "9:41 PM" | "87%"');
             break;
         case 'lyrics':
-            await bot.sendMessage(chatId, '📌 Hantar judul lagu atau link YouTube.\n\nFormat: /lyrics [judul lagu]\nContoh: /lyrics bohemian rhapsody');
+            await bot.sendMessage(chatId, '📌 Hantar judul lagu atau artis.\n\nFormat: /lyrics [judul lagu]\nContoh: /lyrics bohemian rhapsody');
             break;
         case 'stalk':
             await bot.sendMessage(chatId, '📌 Hantar username TikTok untuk stalk.\n\nFormat: /stalk [username]\nContoh: /stalk tiktok');
@@ -595,10 +581,10 @@ bot.on('callback_query', async (query) => {
 🕒 ${new Date().toLocaleString()}
 
 🎵 TikTok: ✅
-🎬 YouTube: ✅ (SocialKit API)
+🎬 YouTube: ✅ (hybrid-ytdl - 5 API backup)
 🛡️ URL Checker: ✅
 📱 IQC: ✅
-🎵 Lyrics: ✅ (yt-dlp)
+🎵 Lyrics: ✅ (lyrics.ovh + AZLyrics)
 👤 Stalk TikTok: ✅ (HasData + TikWM)
 📧 Temp Mail: ✅ (temp-mail.io)
 
@@ -623,8 +609,8 @@ Hantar link TikTok → MP3
 /mp4 [link] → MP4
 
 🎬 YOUTUBE:
-/ytmp3 [link] → MP3 (SocialKit)
-/ytmp4 [link] → MP4 (SocialKit)
+/ytmp3 [link] → MP3
+/ytmp4 [link] → MP4
 
 🛡️ URL CHECKER:
 /check [url] → Check malware
@@ -941,7 +927,7 @@ bot.onText(/\/lyrics (.+)/, async (msg, match) => {
     const query = match[1].trim();
     
     if (!query) {
-        return bot.sendMessage(chatId, '❌ Sila masukkan judul lagu atau link YouTube.\nContoh: /lyrics bohemian rhapsody');
+        return bot.sendMessage(chatId, '❌ Sila masukkan judul lagu atau artis.\nContoh: /lyrics bohemian rhapsody');
     }
     
     const statusMsg = await bot.sendMessage(chatId, `🔍 Mencari lirik untuk "${query}"...`);
@@ -956,7 +942,7 @@ bot.onText(/\/lyrics (.+)/, async (msg, match) => {
 
 📌 **${result.title}**
 🎤 Artis: ${result.artist || 'Unknown'}
-📡 Sumber: ${result.source || 'yt-dlp'}
+📡 Sumber: ${result.source || 'lyrics.ovh'}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ${result.lyrics}
@@ -1158,10 +1144,10 @@ bot.onText(/\/status/, async (msg) => {
 🕒 ${new Date().toLocaleString()}
 
 🎵 TikTok: ✅
-🎬 YouTube: ✅ (SocialKit + Fallback)
+🎬 YouTube: ✅ (hybrid-ytdl - Unlimited)
 🛡️ URL Checker: ✅
 📱 IQC: ✅
-🎵 Lyrics: ✅ (yt-dlp)
+🎵 Lyrics: ✅ (lyrics.ovh + AZLyrics)
 👤 Stalk TikTok: ✅ (HasData + TikWM)
 📧 Temp Mail: ✅ (temp-mail.io)
 
@@ -1238,7 +1224,7 @@ const app = express();
 const port = process.env.PORT || 10000;
 
 app.get('/', (req, res) => {
-    res.send('🎵 @Mp3titkok_bot is running! (Vernux Project - SocialKit API)');
+    res.send('🎵 @Mp3titkok_bot is running! (Vernux Project - Final)');
 });
 
 app.listen(port, '0.0.0.0', () => {
@@ -1247,10 +1233,10 @@ app.listen(port, '0.0.0.0', () => {
 
 console.log('✅ @Mp3titkok_bot siap!');
 console.log('📌 TikTok: Hantar link → MP3 | /mp4 [link] → MP4');
-console.log('📌 YouTube: /ytmp3 [link] → MP3 | /ytmp4 [link] → MP4 (SocialKit)');
+console.log('📌 YouTube: /ytmp3 [link] → MP3 | /ytmp4 [link] → MP4 (hybrid-ytdl)');
 console.log('📌 URL Checker: /check [url] → Check malware/phishing');
 console.log('📱 IQC: /iqc "quote" | "sender" | "time" | "battery"');
-console.log('🎵 Lyrics: /lyrics [judul lagu] → Cari lirik (yt-dlp)');
+console.log('🎵 Lyrics: /lyrics [judul lagu] → Cari lirik');
 console.log('👤 Stalk: /stalk [username] → Dapatkan info profil TikTok (HasData)');
 console.log('📧 Temp Mail: /tempmail → Cipta email sementara');
 console.log('🚀 Vernux Project');
