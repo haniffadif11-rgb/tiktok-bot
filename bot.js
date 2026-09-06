@@ -5,13 +5,13 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { downloadAudio, downloadVideo } = require('hybrid-ytdl');
 
 // ================== TOKEN ==================
 const TOKEN = process.env.TOKEN || '8823917633:AAECyeZnDmIKGWzucHscYnprvfe_P92hl4k';
 
 // ================== API KEYS ==================
 const HASDATA_API_KEY = process.env.HASDATA_API_KEY || '079afdcc-5489-47bf-ad8a-582d4ceb29c7';
+const SYLVATICA_API_KEY = 'sylva-0JAIzVjb';
 
 // ================== GAMBAR UNTUK BOT ==================
 const BOT_IMAGE = 'https://ibb.co/gZgrYtnP';
@@ -19,7 +19,7 @@ const BOT_IMAGE = 'https://ibb.co/gZgrYtnP';
 // ================== BUAT BOT ==================
 const bot = new TelegramBot(TOKEN, { polling: true });
 
-console.log('🎵 @Mp3titkok_bot AKTIF! (Vernux Project - Final)');
+console.log('🎵 @Mp3titkok_bot AKTIF! (Vernux Project - yt-dlp)');
 
 // ================== FUNGSI TIKTOK ==================
 async function downloadTikTok(url, format = 'mp3') {
@@ -95,74 +95,79 @@ async function downloadTikTok(url, format = 'mp3') {
     throw new Error('Semua API TikTok gagal. Cuba link lain.');
 }
 
-// ================== FUNGSI YOUTUBE (HYBRID-YTDL) ==================
+// ================== FUNGSI YOUTUBE (YT-DLP) ==================
 async function downloadYouTube(url, format = 'mp3') {
-    try {
+    return new Promise((resolve, reject) => {
+        const tmpDir = os.tmpdir();
+        const jobId = Date.now();
+        const ext = format === 'mp3' ? 'mp3' : 'mp4';
+        const outFile = path.join(tmpDir, `${jobId}.${ext}`);
+
+        let args = [
+            '--no-check-certificate',
+            '--no-warnings',
+            '--quiet',
+            '--no-playlist',
+            '--max-filesize', '100M'
+        ];
+
         if (format === 'mp3') {
-            const audio = await downloadAudio(url, '128', 'api2');
-            console.log('✅ YouTube Audio source:', audio.source);
-            return {
-                filePath: audio.downloadUrl,
-                isUrl: true,
-                title: audio.title || 'YouTube Audio'
-            };
+            args = args.concat([
+                '--extract-audio',
+                '--audio-format', 'mp3',
+                '--audio-quality', '2',
+                '-o', outFile,
+                url
+            ]);
         } else {
-            const video = await downloadVideo(url, '720', 'api2');
-            console.log('✅ YouTube Video source:', video.source);
-            return {
-                filePath: video.downloadUrl,
-                isUrl: true,
-                title: video.title || 'YouTube Video'
-            };
+            args = args.concat([
+                '-f', 'mp4',
+                '-o', outFile,
+                url
+            ]);
         }
-    } catch (error) {
-        console.error('YouTube Error:', error.message);
-        
-        // Fallback: try API 3
-        try {
-            console.log('🔄 Trying fallback API 3...');
-            if (format === 'mp3') {
-                const audio = await downloadAudio(url, '128', 'api3');
-                return {
-                    filePath: audio.downloadUrl,
-                    isUrl: true,
-                    title: audio.title || 'YouTube Audio'
-                };
-            } else {
-                const video = await downloadVideo(url, '720', 'api3');
-                return {
-                    filePath: video.downloadUrl,
-                    isUrl: true,
-                    title: video.title || 'YouTube Video'
-                };
+
+        console.log(`⚡ Running yt-dlp for ${format}...`);
+        const ytdlp = spawn('yt-dlp', args);
+        let errorOutput = '';
+        let stdoutOutput = '';
+
+        ytdlp.stdout.on('data', (data) => {
+            stdoutOutput += data.toString();
+            console.log('yt-dlp stdout:', data.toString());
+        });
+
+        ytdlp.stderr.on('data', (data) => {
+            errorOutput += data.toString();
+            console.log('yt-dlp stderr:', data.toString());
+        });
+
+        ytdlp.on('close', (code) => {
+            if (code !== 0) {
+                console.error('yt-dlp error code:', code);
+                console.error('yt-dlp error output:', errorOutput);
+                return reject(new Error('Gagal muat turun. Cuba link lain.'));
             }
-        } catch (fallbackError) {
-            console.error('Fallback Error:', fallbackError.message);
-            
-            // Final fallback: try API 1
-            try {
-                console.log('🔄 Trying final fallback API 1...');
-                if (format === 'mp3') {
-                    const audio = await downloadAudio(url, '128', 'api1');
-                    return {
-                        filePath: audio.downloadUrl,
-                        isUrl: true,
-                        title: audio.title || 'YouTube Audio'
-                    };
-                } else {
-                    const video = await downloadVideo(url, '720', 'api1');
-                    return {
-                        filePath: video.downloadUrl,
-                        isUrl: true,
-                        title: video.title || 'YouTube Video'
-                    };
-                }
-            } catch (finalError) {
-                console.error('All APIs failed:', finalError.message);
-                throw new Error('Semua API YouTube gagal. Cuba link lain.');
+
+            if (!fs.existsSync(outFile)) {
+                console.error('File not found:', outFile);
+                return reject(new Error('File tidak dijumpai selepas download.'));
             }
-        }
-    }
+
+            const fileSize = fs.statSync(outFile).size;
+            if (fileSize < 10000) {
+                fs.unlinkSync(outFile);
+                return reject(new Error('File terlalu kecil/rosak.'));
+            }
+
+            console.log(`✅ Download successful: ${outFile} (${fileSize} bytes)`);
+            resolve({
+                filePath: outFile,
+                isUrl: false,
+                title: 'YouTube'
+            });
+        });
+    });
 }
 
 // ================== URL CHECKER ==================
@@ -355,21 +360,64 @@ async function stalkTikTok(username) {
     return await stalkTikTokHasData(username);
 }
 
-// ================== FUNGSI LYRICS (LYRICS.OVH) ==================
+// ================== FUNGSI LYRICS (SYLVATICA) ==================
 async function getLyrics(query) {
     try {
-        const parts = query.split(/ - | by | By /i);
-        let title = query;
-        let artist = '';
-
-        if (parts.length > 1) {
-            title = parts[0].trim();
-            artist = parts[1].trim();
+        const apiUrl = `https://sylvatica.my.id/api/search/lyrics?q=${encodeURIComponent(query)}&apikey=${SYLVATICA_API_KEY}`;
+        console.log(`📡 Trying Sylvatica API...`);
+        
+        const response = await axios.get(apiUrl, {
+            timeout: 15000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        });
+        
+        const data = response.data;
+        console.log('Sylvatica Response:', JSON.stringify(data).substring(0, 500));
+        
+        if (data && data.status === true && data.result && data.result.length > 0) {
+            const firstResult = data.result[0];
+            let lyrics = '';
+            let title = firstResult.trackName || firstResult.name || query;
+            let artist = firstResult.artistName || 'Unknown';
+            
+            if (firstResult.plainLyrics) {
+                lyrics = firstResult.plainLyrics;
+            } else if (firstResult.lyricsfile && firstResult.lyricsfile.plain) {
+                lyrics = firstResult.lyricsfile.plain;
+            } else if (firstResult.syncedLyrics) {
+                lyrics = firstResult.syncedLyrics.replace(/\[\d{2}:\d{2}\.\d{2}\]\s*/g, '');
+            }
+            
+            if (lyrics) {
+                return {
+                    title: title,
+                    artist: artist,
+                    lyrics: lyrics,
+                    source: 'Sylvatica'
+                };
+            } else {
+                throw new Error('Lirik tidak dijumpai dalam response.');
+            }
+        } else {
+            throw new Error(data?.message || 'Lirik tidak dijumpai.');
         }
+    } catch (error) {
+        console.error('Sylvatica Error:', error.response?.data || error.message);
+        
+        console.log('🔄 Sylvatica failed, trying lyrics.ovh...');
+        try {
+            const parts = query.split(/ - | by | By /i);
+            let title = query;
+            let artist = '';
 
-        // Try with artist + title first
-        if (artist) {
-            try {
+            if (parts.length > 1) {
+                title = parts[0].trim();
+                artist = parts[1].trim();
+            }
+
+            if (artist) {
                 const response = await axios.get(`https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`, {
                     timeout: 10000
                 });
@@ -379,16 +427,11 @@ async function getLyrics(query) {
                         title: `${title} - ${artist}`,
                         artist: artist,
                         lyrics: response.data.lyrics,
-                        source: 'lyrics.ovh'
+                        source: 'lyrics.ovh (fallback)'
                     };
                 }
-            } catch (e) {
-                console.log('❌ lyrics.ovh (with artist) failed');
             }
-        }
-
-        // Try with just title
-        try {
+            
             const response = await axios.get(`https://api.lyrics.ovh/v1/${encodeURIComponent(query)}`, {
                 timeout: 10000
             });
@@ -398,51 +441,14 @@ async function getLyrics(query) {
                     title: query,
                     artist: 'Unknown',
                     lyrics: response.data.lyrics,
-                    source: 'lyrics.ovh'
+                    source: 'lyrics.ovh (fallback)'
                 };
             }
-        } catch (e) {
-            console.log('❌ lyrics.ovh (just title) failed');
+        } catch (fallbackError) {
+            console.log('❌ Fallback failed:', fallbackError.message);
         }
-
-        // Fallback: try AZLyrics
-        try {
-            const searchQuery = encodeURIComponent(query + ' lyrics');
-            const searchUrl = `https://www.azlyrics.com/search.php?q=${searchQuery}`;
-            const response = await axios.get(searchUrl, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                },
-                timeout: 10000
-            });
-
-            const html = response.data;
-            const match = html.match(/<div class="lyric">(.*?)<\/div>/s);
-            if (match && match[1]) {
-                const lyrics = match[1]
-                    .replace(/<[^>]+>/g, '')
-                    .replace(/&#x27;/g, "'")
-                    .replace(/&quot;/g, '"')
-                    .replace(/&amp;/g, '&')
-                    .trim();
-                
-                if (lyrics && lyrics.length > 50) {
-                    return {
-                        title: query,
-                        artist: 'Unknown',
-                        lyrics: lyrics,
-                        source: 'AZLyrics (fallback)'
-                    };
-                }
-            }
-        } catch (e) {
-            console.log('❌ AZLyrics fallback failed');
-        }
-
+        
         throw new Error('Lirik tidak dijumpai. Cuba judul lain.');
-    } catch (error) {
-        console.error('Lyrics Error:', error.message);
-        throw new Error('Gagal mendapatkan lirik. Cuba judul lain.');
     }
 }
 
@@ -564,7 +570,7 @@ bot.on('callback_query', async (query) => {
             await bot.sendMessage(chatId, '📱 iPhone Quote Creator\n\nFormat: /iqc "quote" | "sender" | "time" | "battery"\n\nContoh: /iqc "Hello World!" | "XSO" | "9:41 PM" | "87%"');
             break;
         case 'lyrics':
-            await bot.sendMessage(chatId, '📌 Hantar judul lagu atau artis.\n\nFormat: /lyrics [judul lagu]\nContoh: /lyrics bohemian rhapsody');
+            await bot.sendMessage(chatId, '📌 Hantar judul lagu atau artis.\n\nFormat: /lyrics [judul lagu]\nContoh: /lyrics ariana grande bye');
             break;
         case 'stalk':
             await bot.sendMessage(chatId, '📌 Hantar username TikTok untuk stalk.\n\nFormat: /stalk [username]\nContoh: /stalk tiktok');
@@ -581,10 +587,10 @@ bot.on('callback_query', async (query) => {
 🕒 ${new Date().toLocaleString()}
 
 🎵 TikTok: ✅
-🎬 YouTube: ✅ (hybrid-ytdl - 5 API backup)
+🎬 YouTube: ✅ (yt-dlp)
 🛡️ URL Checker: ✅
 📱 IQC: ✅
-🎵 Lyrics: ✅ (lyrics.ovh + AZLyrics)
+🎵 Lyrics: ✅ (Sylvatica)
 👤 Stalk TikTok: ✅ (HasData + TikWM)
 📧 Temp Mail: ✅ (temp-mail.io)
 
@@ -757,23 +763,15 @@ bot.onText(/\/ytmp3 (.+)/, async (msg, match) => {
         return bot.sendMessage(chatId, '❌ Hantar link YouTube sahaja.');
     }
 
-    const status = await bot.sendMessage(chatId, '⏳ Memproses audio YouTube...');
+    const status = await bot.sendMessage(chatId, '⏳ Memproses audio YouTube... (ini mungkin mengambil masa)');
 
     try {
         const result = await downloadYouTube(url, 'mp3');
-        
-        if (result.isUrl) {
-            await bot.sendAudio(chatId, result.filePath, {
-                caption: `🎵 ${result.title}`,
-                title: result.title
-            });
-        } else {
-            await bot.sendDocument(chatId, result.filePath, {
-                caption: `🎵 ${result.title}`
-            });
-            fs.unlink(result.filePath, () => {});
-        }
-        
+        await bot.sendAudio(chatId, result.filePath, {
+            caption: '🎵 YouTube Audio',
+            title: 'YouTube Audio'
+        });
+        fs.unlink(result.filePath, () => {});
         await bot.deleteMessage(chatId, status.message_id);
     } catch (error) {
         await bot.editMessageText(`❌ Gagal: ${error.message}`, {
@@ -792,23 +790,15 @@ bot.onText(/\/ytmp4 (.+)/, async (msg, match) => {
         return bot.sendMessage(chatId, '❌ Hantar link YouTube sahaja.');
     }
 
-    const status = await bot.sendMessage(chatId, '⏳ Memproses video YouTube...');
+    const status = await bot.sendMessage(chatId, '⏳ Memproses video YouTube... (ini mungkin mengambil masa)');
 
     try {
         const result = await downloadYouTube(url, 'mp4');
-        
-        if (result.isUrl) {
-            await bot.sendVideo(chatId, result.filePath, {
-                caption: `🎬 ${result.title}`,
-                supports_streaming: true
-            });
-        } else {
-            await bot.sendDocument(chatId, result.filePath, {
-                caption: `🎬 ${result.title}`
-            });
-            fs.unlink(result.filePath, () => {});
-        }
-        
+        await bot.sendVideo(chatId, result.filePath, {
+            caption: '🎬 YouTube Video',
+            supports_streaming: true
+        });
+        fs.unlink(result.filePath, () => {});
         await bot.deleteMessage(chatId, status.message_id);
     } catch (error) {
         await bot.editMessageText(`❌ Gagal: ${error.message}`, {
@@ -927,7 +917,7 @@ bot.onText(/\/lyrics (.+)/, async (msg, match) => {
     const query = match[1].trim();
     
     if (!query) {
-        return bot.sendMessage(chatId, '❌ Sila masukkan judul lagu atau artis.\nContoh: /lyrics bohemian rhapsody');
+        return bot.sendMessage(chatId, '❌ Sila masukkan judul lagu atau artis.\nContoh: /lyrics ariana grande bye');
     }
     
     const statusMsg = await bot.sendMessage(chatId, `🔍 Mencari lirik untuk "${query}"...`);
@@ -942,14 +932,14 @@ bot.onText(/\/lyrics (.+)/, async (msg, match) => {
 
 📌 **${result.title}**
 🎤 Artis: ${result.artist || 'Unknown'}
-📡 Sumber: ${result.source || 'lyrics.ovh'}
+📡 Sumber: ${result.source || 'Sylvatica'}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ${result.lyrics}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 🔍 /lyrics [judul lagu]
-💡 Contoh: /lyrics bohemian rhapsody
+💡 Contoh: /lyrics ariana grande bye
 `;
         
         if (reply.length > 4096) {
@@ -1144,10 +1134,10 @@ bot.onText(/\/status/, async (msg) => {
 🕒 ${new Date().toLocaleString()}
 
 🎵 TikTok: ✅
-🎬 YouTube: ✅ (hybrid-ytdl - Unlimited)
+🎬 YouTube: ✅ (yt-dlp)
 🛡️ URL Checker: ✅
 📱 IQC: ✅
-🎵 Lyrics: ✅ (lyrics.ovh + AZLyrics)
+🎵 Lyrics: ✅ (Sylvatica)
 👤 Stalk TikTok: ✅ (HasData + TikWM)
 📧 Temp Mail: ✅ (temp-mail.io)
 
@@ -1192,22 +1182,14 @@ bot.on('message', async (msg) => {
 
     // YouTube
     if (text.includes('youtube.com') || text.includes('youtu.be')) {
-        const status = await bot.sendMessage(chatId, '⏳ Memproses audio YouTube...');
+        const status = await bot.sendMessage(chatId, '⏳ Memproses audio YouTube... (ini mungkin mengambil masa)');
         try {
             const result = await downloadYouTube(text, 'mp3');
-            
-            if (result.isUrl) {
-                await bot.sendAudio(chatId, result.filePath, {
-                    caption: `🎵 ${result.title}`,
-                    title: result.title
-                });
-            } else {
-                await bot.sendDocument(chatId, result.filePath, {
-                    caption: `🎵 ${result.title}`
-                });
-                fs.unlink(result.filePath, () => {});
-            }
-            
+            await bot.sendAudio(chatId, result.filePath, {
+                caption: '🎵 YouTube Audio',
+                title: 'YouTube Audio'
+            });
+            fs.unlink(result.filePath, () => {});
             await bot.deleteMessage(chatId, status.message_id);
         } catch (error) {
             await bot.editMessageText(`❌ Gagal: ${error.message}`, {
@@ -1224,7 +1206,7 @@ const app = express();
 const port = process.env.PORT || 10000;
 
 app.get('/', (req, res) => {
-    res.send('🎵 @Mp3titkok_bot is running! (Vernux Project - Final)');
+    res.send('🎵 @Mp3titkok_bot is running! (Vernux Project - yt-dlp)');
 });
 
 app.listen(port, '0.0.0.0', () => {
@@ -1233,10 +1215,10 @@ app.listen(port, '0.0.0.0', () => {
 
 console.log('✅ @Mp3titkok_bot siap!');
 console.log('📌 TikTok: Hantar link → MP3 | /mp4 [link] → MP4');
-console.log('📌 YouTube: /ytmp3 [link] → MP3 | /ytmp4 [link] → MP4 (hybrid-ytdl)');
+console.log('📌 YouTube: /ytmp3 [link] → MP3 | /ytmp4 [link] → MP4 (yt-dlp)');
 console.log('📌 URL Checker: /check [url] → Check malware/phishing');
 console.log('📱 IQC: /iqc "quote" | "sender" | "time" | "battery"');
-console.log('🎵 Lyrics: /lyrics [judul lagu] → Cari lirik');
+console.log('🎵 Lyrics: /lyrics [judul lagu] → Cari lirik (Sylvatica)');
 console.log('👤 Stalk: /stalk [username] → Dapatkan info profil TikTok (HasData)');
 console.log('📧 Temp Mail: /tempmail → Cipta email sementara');
 console.log('🚀 Vernux Project');
