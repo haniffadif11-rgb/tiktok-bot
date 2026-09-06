@@ -5,7 +5,6 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-import { getVideoInfo } from '@natsu.darkcore/ytdl-darkcore';
 
 // ================== TOKEN ==================
 const TOKEN = process.env.TOKEN || '8823917633:AAECyeZnDmIKGWzucHscYnprvfe_P92hl4k';
@@ -20,7 +19,7 @@ const BOT_IMAGE = 'https://ibb.co/gZgrYtnP';
 // ================== BUAT BOT ==================
 const bot = new TelegramBot(TOKEN, { polling: true });
 
-console.log('🎵 @Mp3titkok_bot AKTIF! (Vernux Project - YouTube Cepat)');
+console.log('🎵 @Mp3titkok_bot AKTIF! (Vernux Project - Final)');
 
 // ================== FUNGSI TIKTOK ==================
 async function downloadTikTok(url, format = 'mp3') {
@@ -96,49 +95,77 @@ async function downloadTikTok(url, format = 'mp3') {
     throw new Error('Semua API TikTok gagal. Cuba link lain.');
 }
 
-// ================== FUNGSI YOUTUBE (CEPAT - PAUTAN TERUS) ==================
+// ================== FUNGSI YOUTUBE (API VEVIOS - FREE & STABIL) ==================
 async function downloadYouTube(url, format = 'mp3') {
-    try {
-        // Extract video ID
-        const videoId = url.split('v=')[1]?.split('&')[0];
-        if (!videoId) throw new Error('URL tidak sah.');
-
-        // Get video info from YouTube API
-        const info = await getVideoInfo(videoId);
-        console.log('✅ YouTube Info:', info.title);
-
-        let downloadUrl = null;
-        let title = info.title || 'YouTube';
-
-        if (format === 'mp3') {
-            // Get best audio
-            const audioFormat = info.bestAudio;
-            if (audioFormat) {
-                downloadUrl = audioFormat.url;
-                title = info.title || 'YouTube Audio';
+    const API_LIST = [
+        // API 1: Vevioz (free, stabil)
+        {
+            name: 'Vevioz',
+            url: (u, f) => `https://api.vevioz.com/api/button/${f === 'mp3' ? 'mp3' : 'mp4'}/${encodeURIComponent(u)}`,
+            extractor: (data) => {
+                if (data && data.download) {
+                    return {
+                        url: data.download,
+                        title: data.title || 'YouTube'
+                    };
+                }
+                return null;
             }
-        } else {
-            // Get video (720p)
-            const videoFormat = info.formats.find(f => f.qualityLabel === '720p');
-            if (videoFormat) {
-                downloadUrl = videoFormat.url;
-                title = info.title || 'YouTube Video';
+        },
+        // API 2: YT-Downloader (backup)
+        {
+            name: 'YTDownloader',
+            url: (u, f) => `https://yt-downloader.vercel.app/api/download?url=${encodeURIComponent(u)}&type=${f === 'mp3' ? 'audio' : 'video'}`,
+            extractor: (data) => {
+                if (data && data.downloadUrl) {
+                    return {
+                        url: data.downloadUrl,
+                        title: data.title || 'YouTube'
+                    };
+                }
+                return null;
+            }
+        },
+        // API 3: Y2Mate (backup 2)
+        {
+            name: 'Y2Mate',
+            url: (u) => `https://y2mate.com/api/convert?url=${encodeURIComponent(u)}`,
+            extractor: (data) => {
+                if (data && data.downloadUrl) {
+                    return {
+                        url: data.downloadUrl,
+                        title: data.title || 'YouTube'
+                    };
+                }
+                return null;
             }
         }
+    ];
 
-        if (!downloadUrl) {
-            throw new Error('Format tidak dijumpai.');
+    for (const api of API_LIST) {
+        try {
+            console.log(`📡 Trying YouTube API: ${api.name}...`);
+            const response = await axios.get(api.url(url, format), {
+                timeout: 20000,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'Accept': 'application/json'
+                }
+            });
+            const result = api.extractor(response.data);
+            if (result && result.url) {
+                console.log(`✅ YouTube API ${api.name} berjaya!`);
+                return {
+                    filePath: result.url,
+                    isUrl: true,
+                    title: result.title || 'YouTube'
+                };
+            }
+        } catch (error) {
+            console.log(`❌ YouTube API ${api.name} failed: ${error.message}`);
         }
-
-        return {
-            filePath: downloadUrl,
-            isUrl: true,
-            title: title
-        };
-    } catch (error) {
-        console.error('YouTube Error:', error.message);
-        throw new Error('Gagal mendapatkan pautan muat turun. Cuba lagi.');
     }
+    throw new Error('Semua API YouTube gagal. Cuba link lain.');
 }
 
 // ================== URL CHECKER ==================
@@ -558,7 +585,7 @@ bot.on('callback_query', async (query) => {
 🕒 ${new Date().toLocaleString()}
 
 🎵 TikTok: ✅
-🎬 YouTube: ✅ (Cepat - pautan terus)
+🎬 YouTube: ✅ (Vevioz API)
 🛡️ URL Checker: ✅
 📱 IQC: ✅
 🎵 Lyrics: ✅ (Sylvatica)
@@ -585,7 +612,7 @@ bot.on('callback_query', async (query) => {
 Hantar link TikTok → MP3
 /mp4 [link] → MP4
 
-🎬 YOUTUBE (CEPAT!):
+🎬 YOUTUBE:
 /ytmp3 [link] → MP3
 /ytmp4 [link] → MP4
 
@@ -663,7 +690,7 @@ bot.onText(/\/help/, async (msg) => {
 Hantar link TikTok → MP3
 /mp4 [link] → MP4
 
-🎬 YOUTUBE (CEPAT!):
+🎬 YOUTUBE:
 /ytmp3 [link] → MP3
 /ytmp4 [link] → MP4
 
@@ -723,9 +750,9 @@ bot.onText(/\/mp4 (.+)/, async (msg, match) => {
     }
 });
 
-// ================== PERINTAH YOUTUBE (CEPAT) ==================
+// ================== PERINTAH YOUTUBE ==================
 
-// /ytmp3 - YouTube audio (cepat)
+// /ytmp3 - YouTube audio
 bot.onText(/\/ytmp3 (.+)/, async (msg, match) => {
     const chatId = msg.chat.id;
     const url = match[1].trim();
@@ -734,7 +761,7 @@ bot.onText(/\/ytmp3 (.+)/, async (msg, match) => {
         return bot.sendMessage(chatId, '❌ Hantar link YouTube sahaja.');
     }
 
-    const status = await bot.sendMessage(chatId, '⏳ Memproses audio YouTube... (cepat!)');
+    const status = await bot.sendMessage(chatId, '⏳ Memproses audio YouTube...');
 
     try {
         const result = await downloadYouTube(url, 'mp3');
@@ -751,7 +778,7 @@ bot.onText(/\/ytmp3 (.+)/, async (msg, match) => {
     }
 });
 
-// /ytmp4 - YouTube video (cepat)
+// /ytmp4 - YouTube video
 bot.onText(/\/ytmp4 (.+)/, async (msg, match) => {
     const chatId = msg.chat.id;
     const url = match[1].trim();
@@ -760,7 +787,7 @@ bot.onText(/\/ytmp4 (.+)/, async (msg, match) => {
         return bot.sendMessage(chatId, '❌ Hantar link YouTube sahaja.');
     }
 
-    const status = await bot.sendMessage(chatId, '⏳ Memproses video YouTube... (cepat!)');
+    const status = await bot.sendMessage(chatId, '⏳ Memproses video YouTube...');
 
     try {
         const result = await downloadYouTube(url, 'mp4');
@@ -1103,7 +1130,7 @@ bot.onText(/\/status/, async (msg) => {
 🕒 ${new Date().toLocaleString()}
 
 🎵 TikTok: ✅
-🎬 YouTube: ✅ (Cepat - pautan terus)
+🎬 YouTube: ✅ (Vevioz API)
 🛡️ URL Checker: ✅
 📱 IQC: ✅
 🎵 Lyrics: ✅ (Sylvatica)
@@ -1149,9 +1176,9 @@ bot.on('message', async (msg) => {
         return;
     }
 
-    // YouTube (cepat)
+    // YouTube
     if (text.includes('youtube.com') || text.includes('youtu.be')) {
-        const status = await bot.sendMessage(chatId, '⏳ Memproses audio YouTube... (cepat!)');
+        const status = await bot.sendMessage(chatId, '⏳ Memproses audio YouTube...');
         try {
             const result = await downloadYouTube(text, 'mp3');
             await bot.sendAudio(chatId, result.filePath, {
@@ -1174,7 +1201,7 @@ const app = express();
 const port = process.env.PORT || 10000;
 
 app.get('/', (req, res) => {
-    res.send('🎵 @Mp3titkok_bot is running! (Vernux Project - YouTube Cepat)');
+    res.send('🎵 @Mp3titkok_bot is running! (Vernux Project - Final)');
 });
 
 app.listen(port, '0.0.0.0', () => {
@@ -1183,7 +1210,7 @@ app.listen(port, '0.0.0.0', () => {
 
 console.log('✅ @Mp3titkok_bot siap!');
 console.log('📌 TikTok: Hantar link → MP3 | /mp4 [link] → MP4');
-console.log('📌 YouTube: /ytmp3 [link] → MP3 | /ytmp4 [link] → MP4 (CEPAT!)');
+console.log('📌 YouTube: /ytmp3 [link] → MP3 | /ytmp4 [link] → MP4 (Vevioz API)');
 console.log('📌 URL Checker: /check [url] → Check malware/phishing');
 console.log('📱 IQC: /iqc "quote" | "sender" | "time" | "battery"');
 console.log('🎵 Lyrics: /lyrics [judul lagu] → Cari lirik (Sylvatica)');
