@@ -14,9 +14,9 @@ const BOT_IMAGE = 'https://ibb.co/gZgrYtnP';
 // ================== BUAT BOT ==================
 const bot = new TelegramBot(TOKEN, { polling: true });
 
-console.log('🎵 @Mp3titkok_bot AKTIF! (Vernux Project - Optimized for Render)');
+console.log('🎵 @Mp3titkok_bot AKTIF! (Vernux Project - SocialKit API)');
 
-// ================== FUNGSI TIKTOK (API SAHAJA) ==================
+// ================== FUNGSI TIKTOK ==================
 async function downloadTikTok(url, format = 'mp3') {
     const API_LIST = [
         {
@@ -90,74 +90,76 @@ async function downloadTikTok(url, format = 'mp3') {
     throw new Error('Semua API TikTok gagal. Cuba link lain.');
 }
 
-// ================== FUNGSI YOUTUBE (API SAHAJA - CEPAT) ==================
+// ================== FUNGSI YOUTUBE (SOCIALKIT + FALLBACK) ==================
 async function downloadYouTube(url, format = 'mp3') {
-    const API_LIST = [
-        {
-            name: 'YT-API',
-            url: (u, f) => `https://yt-api.com/api/convert?url=${encodeURIComponent(u)}&format=${f === 'mp3' ? 'mp3' : 'mp4'}`,
-            extractor: (data) => {
-                if (data && data.downloadUrl) {
-                    return {
-                        url: data.downloadUrl,
-                        title: data.title || 'YouTube'
-                    };
-                }
-                return null;
+    try {
+        const apiUrl = `https://api.socialkit.dev/youtube/download?url=${encodeURIComponent(url)}&format=${format === 'mp3' ? 'mp3' : 'mp4'}`;
+        console.log(`📡 Trying SocialKit API: ${apiUrl}`);
+        
+        const response = await axios.get(apiUrl, {
+            timeout: 30000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept': 'application/json'
             }
-        },
-        {
-            name: 'Y2Mate',
-            url: (u, f) => `https://api.y2mate.com/api/convert?url=${encodeURIComponent(u)}&format=${f === 'mp3' ? 'mp3' : 'mp4'}`,
-            extractor: (data) => {
-                if (data && data.downloadUrl) {
-                    return {
-                        url: data.downloadUrl,
-                        title: data.title || 'YouTube'
-                    };
-                }
-                return null;
-            }
-        },
-        {
-            name: 'SaveFrom',
-            url: (u, f) => `https://api.savefrom.net/api/convert?url=${encodeURIComponent(u)}&format=${f === 'mp3' ? 'mp3' : 'mp4'}`,
-            extractor: (data) => {
-                if (data && data.downloadUrl) {
-                    return {
-                        url: data.downloadUrl,
-                        title: data.title || 'YouTube'
-                    };
-                }
-                return null;
-            }
+        });
+        
+        const data = response.data;
+        console.log('SocialKit Response:', JSON.stringify(data).substring(0, 300));
+        
+        if (data && data.downloadUrl) {
+            return {
+                filePath: data.downloadUrl,
+                isUrl: true,
+                title: data.title || 'YouTube'
+            };
+        } else if (data && data.url) {
+            return {
+                filePath: data.url,
+                isUrl: true,
+                title: data.title || 'YouTube'
+            };
+        } else if (data && data.data && data.data.downloadUrl) {
+            return {
+                filePath: data.data.downloadUrl,
+                isUrl: true,
+                title: data.data.title || 'YouTube'
+            };
+        } else {
+            throw new Error('Link tidak dijumpai dalam response.');
         }
-    ];
-
-    for (const api of API_LIST) {
-        try {
-            console.log(`📡 Trying YouTube API: ${api.name}...`);
-            const response = await axios.get(api.url(url, format), {
-                timeout: 20000,
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                    'Accept': 'application/json'
-                }
-            });
-            const result = api.extractor(response.data);
-            if (result && result.url) {
-                console.log(`✅ YouTube API ${api.name} berjaya!`);
-                return {
-                    filePath: result.url,
-                    isUrl: true,
-                    title: result.title || 'YouTube'
-                };
-            }
-        } catch (error) {
-            console.log(`❌ YouTube API ${api.name} failed: ${error.message}`);
-        }
+    } catch (error) {
+        console.error('SocialKit Error:', error.response?.data || error.message);
+        
+        // Fallback: cuba API lain
+        console.log('🔄 SocialKit failed, trying fallback...');
+        return await downloadYouTubeFallback(url, format);
     }
-    throw new Error('Semua API YouTube gagal. Cuba link lain.');
+}
+
+// ================== FUNGSI YOUTUBE (FALLBACK) ==================
+async function downloadYouTubeFallback(url, format = 'mp3') {
+    try {
+        const apiUrl = `https://yt-downloader.vercel.app/api/download?url=${encodeURIComponent(url)}&type=${format === 'mp3' ? 'audio' : 'video'}`;
+        const response = await axios.get(apiUrl, {
+            timeout: 30000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        });
+        
+        if (response.data && response.data.downloadUrl) {
+            return {
+                filePath: response.data.downloadUrl,
+                isUrl: true,
+                title: response.data.title || 'YouTube'
+            };
+        }
+        throw new Error('Fallback API gagal.');
+    } catch (error) {
+        console.error('Fallback Error:', error.message);
+        throw new Error('Semua API YouTube gagal. Cuba link lain.');
+    }
 }
 
 // ================== URL CHECKER ==================
@@ -350,7 +352,7 @@ async function stalkTikTok(username) {
     return await stalkTikTokHasData(username);
 }
 
-// ================== FUNGSI LYRICS (YT-DLP) ==================
+// ================== FUNGSI LYRICS ==================
 function getLyricsFromVideo(url) {
     return new Promise((resolve, reject) => {
         const args = [
@@ -593,7 +595,7 @@ bot.on('callback_query', async (query) => {
 🕒 ${new Date().toLocaleString()}
 
 🎵 TikTok: ✅
-🎬 YouTube: ✅
+🎬 YouTube: ✅ (SocialKit API)
 🛡️ URL Checker: ✅
 📱 IQC: ✅
 🎵 Lyrics: ✅ (yt-dlp)
@@ -621,8 +623,8 @@ Hantar link TikTok → MP3
 /mp4 [link] → MP4
 
 🎬 YOUTUBE:
-/ytmp3 [link] → MP3
-/ytmp4 [link] → MP4
+/ytmp3 [link] → MP3 (SocialKit)
+/ytmp4 [link] → MP4 (SocialKit)
 
 🛡️ URL CHECKER:
 /check [url] → Check malware
@@ -1156,7 +1158,7 @@ bot.onText(/\/status/, async (msg) => {
 🕒 ${new Date().toLocaleString()}
 
 🎵 TikTok: ✅
-🎬 YouTube: ✅
+🎬 YouTube: ✅ (SocialKit + Fallback)
 🛡️ URL Checker: ✅
 📱 IQC: ✅
 🎵 Lyrics: ✅ (yt-dlp)
@@ -1236,7 +1238,7 @@ const app = express();
 const port = process.env.PORT || 10000;
 
 app.get('/', (req, res) => {
-    res.send('🎵 @Mp3titkok_bot is running! (Vernux Project - Optimized for Render)');
+    res.send('🎵 @Mp3titkok_bot is running! (Vernux Project - SocialKit API)');
 });
 
 app.listen(port, '0.0.0.0', () => {
@@ -1245,7 +1247,7 @@ app.listen(port, '0.0.0.0', () => {
 
 console.log('✅ @Mp3titkok_bot siap!');
 console.log('📌 TikTok: Hantar link → MP3 | /mp4 [link] → MP4');
-console.log('📌 YouTube: /ytmp3 [link] → MP3 | /ytmp4 [link] → MP4 (API - CEPAT!)');
+console.log('📌 YouTube: /ytmp3 [link] → MP3 | /ytmp4 [link] → MP4 (SocialKit)');
 console.log('📌 URL Checker: /check [url] → Check malware/phishing');
 console.log('📱 IQC: /iqc "quote" | "sender" | "time" | "battery"');
 console.log('🎵 Lyrics: /lyrics [judul lagu] → Cari lirik (yt-dlp)');
