@@ -1,11 +1,6 @@
 const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
 const express = require('express');
-const { spawn } = require('child_process');
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
-const { downloadAudio, downloadVideo } = require('hybrid-ytdl');
 
 // ================== TOKEN ==================
 const TOKEN = process.env.TOKEN || '8823917633:AAECyeZnDmIKGWzucHscYnprvfe_P92hl4k';
@@ -19,9 +14,9 @@ const BOT_IMAGE = 'https://ibb.co/gZgrYtnP';
 // ================== BUAT BOT ==================
 const bot = new TelegramBot(TOKEN, { polling: true });
 
-console.log('🎵 @Mp3titkok_bot AKTIF! (Vernux Project)');
+console.log('🎵 @Mp3titkok_bot AKTIF! (Vernux Project - Optimized for Render)');
 
-// ================== FUNGSI TIKTOK ==================
+// ================== FUNGSI TIKTOK (API SAHAJA) ==================
 async function downloadTikTok(url, format = 'mp3') {
     const API_LIST = [
         {
@@ -73,7 +68,7 @@ async function downloadTikTok(url, format = 'mp3') {
         try {
             console.log(`📡 Trying TikTok API: ${api.name}...`);
             const response = await axios.get(api.url(url), {
-                timeout: 10000,
+                timeout: 15000,
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
                 }
@@ -95,144 +90,74 @@ async function downloadTikTok(url, format = 'mp3') {
     throw new Error('Semua API TikTok gagal. Cuba link lain.');
 }
 
-// ================== FUNGSI YOUTUBE ==================
+// ================== FUNGSI YOUTUBE (API SAHAJA - CEPAT) ==================
 async function downloadYouTube(url, format = 'mp3') {
-    try {
-        let result;
-        
-        if (format === 'mp3') {
-            result = await downloadAudio(url, '128', 'api2');
-            console.log('✅ YouTube Audio source:', result.source);
-            
-            if (!result.downloadUrl || !result.downloadUrl.startsWith('http')) {
-                throw new Error('Invalid audio URL');
-            }
-            
-            try {
-                const head = await axios.head(result.downloadUrl, { timeout: 5000 });
-                if (head.status !== 200) {
-                    throw new Error('Audio URL not accessible');
+    const API_LIST = [
+        {
+            name: 'YT-API',
+            url: (u, f) => `https://yt-api.com/api/convert?url=${encodeURIComponent(u)}&format=${f === 'mp3' ? 'mp3' : 'mp4'}`,
+            extractor: (data) => {
+                if (data && data.downloadUrl) {
+                    return {
+                        url: data.downloadUrl,
+                        title: data.title || 'YouTube'
+                    };
                 }
-            } catch (headError) {
-                console.log('Head request failed, but continuing...');
+                return null;
             }
-            
-            return {
-                filePath: result.downloadUrl,
-                isUrl: true,
-                title: result.title || 'YouTube Audio'
-            };
-        } else {
-            result = await downloadVideo(url, '720', 'api2');
-            console.log('✅ YouTube Video source:', result.source);
-            
-            if (!result.downloadUrl || !result.downloadUrl.startsWith('http')) {
-                throw new Error('Invalid video URL');
+        },
+        {
+            name: 'Y2Mate',
+            url: (u, f) => `https://api.y2mate.com/api/convert?url=${encodeURIComponent(u)}&format=${f === 'mp3' ? 'mp3' : 'mp4'}`,
+            extractor: (data) => {
+                if (data && data.downloadUrl) {
+                    return {
+                        url: data.downloadUrl,
+                        title: data.title || 'YouTube'
+                    };
+                }
+                return null;
             }
-            
-            return {
-                filePath: result.downloadUrl,
-                isUrl: true,
-                title: result.title || 'YouTube Video'
-            };
+        },
+        {
+            name: 'SaveFrom',
+            url: (u, f) => `https://api.savefrom.net/api/convert?url=${encodeURIComponent(u)}&format=${f === 'mp3' ? 'mp3' : 'mp4'}`,
+            extractor: (data) => {
+                if (data && data.downloadUrl) {
+                    return {
+                        url: data.downloadUrl,
+                        title: data.title || 'YouTube'
+                    };
+                }
+                return null;
+            }
         }
-    } catch (error) {
-        console.error('YouTube Error:', error.message);
-        
+    ];
+
+    for (const api of API_LIST) {
         try {
-            if (format === 'mp3') {
-                const audio = await downloadAudio(url, '128', 'api3');
-                if (audio.downloadUrl && audio.downloadUrl.startsWith('http')) {
-                    return {
-                        filePath: audio.downloadUrl,
-                        isUrl: true,
-                        title: audio.title || 'YouTube Audio'
-                    };
+            console.log(`📡 Trying YouTube API: ${api.name}...`);
+            const response = await axios.get(api.url(url, format), {
+                timeout: 20000,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'Accept': 'application/json'
                 }
-                throw new Error('Invalid audio URL from fallback');
-            } else {
-                const video = await downloadVideo(url, '720', 'api3');
-                if (video.downloadUrl && video.downloadUrl.startsWith('http')) {
-                    return {
-                        filePath: video.downloadUrl,
-                        isUrl: true,
-                        title: video.title || 'YouTube Video'
-                    };
-                }
-                throw new Error('Invalid video URL from fallback');
+            });
+            const result = api.extractor(response.data);
+            if (result && result.url) {
+                console.log(`✅ YouTube API ${api.name} berjaya!`);
+                return {
+                    filePath: result.url,
+                    isUrl: true,
+                    title: result.title || 'YouTube'
+                };
             }
-        } catch (fallbackError) {
-            console.error('Fallback Error:', fallbackError.message);
-            
-            try {
-                console.log('Attempting yt-dlp fallback...');
-                return await downloadYouTubeSlow(url, format);
-            } catch (finalError) {
-                console.error('All APIs failed:', finalError.message);
-                throw new Error('Semua API YouTube gagal. Cuba link lain.');
-            }
+        } catch (error) {
+            console.log(`❌ YouTube API ${api.name} failed: ${error.message}`);
         }
     }
-}
-
-// ================== FUNGSI YOUTUBE (YT-DLP BACKUP) ==================
-function downloadYouTubeSlow(url, format = 'mp3') {
-    return new Promise((resolve, reject) => {
-        const tmpDir = os.tmpdir();
-        const jobId = Date.now();
-        const ext = format === 'mp3' ? 'mp3' : 'mp4';
-        const outFile = path.join(tmpDir, `${jobId}.${ext}`);
-
-        let args = [
-            '--no-check-certificate',
-            '--no-warnings',
-            '--quiet',
-            '--no-playlist'
-        ];
-
-        if (format === 'mp3') {
-            args = args.concat([
-                '--extract-audio',
-                '--audio-format', 'mp3',
-                '--audio-quality', '2',
-                '-o', outFile,
-                url
-            ]);
-        } else {
-            args = args.concat([
-                '-f', 'mp4',
-                '-o', outFile,
-                url
-            ]);
-        }
-
-        console.log(`⚡ Running yt-dlp (backup)...`);
-        const ytdlp = spawn('yt-dlp', args);
-        let errorOutput = '';
-
-        ytdlp.stderr.on('data', (data) => {
-            errorOutput += data.toString();
-        });
-
-        ytdlp.on('close', (code) => {
-            if (code !== 0 || !fs.existsSync(outFile)) {
-                console.error('yt-dlp error:', errorOutput);
-                return reject(new Error('Gagal muat turun. Cuba link lain.'));
-            }
-
-            const fileSize = fs.statSync(outFile).size;
-            if (fileSize < 10000) {
-                fs.unlinkSync(outFile);
-                return reject(new Error('File terlalu kecil/rosak.'));
-            }
-
-            resolve({
-                filePath: outFile,
-                isUrl: false,
-                title: 'YouTube'
-            });
-        });
-    });
+    throw new Error('Semua API YouTube gagal. Cuba link lain.');
 }
 
 // ================== URL CHECKER ==================
@@ -425,7 +350,7 @@ async function stalkTikTok(username) {
     return await stalkTikTokHasData(username);
 }
 
-// ================== FUNGSI LYRICS ==================
+// ================== FUNGSI LYRICS (YT-DLP) ==================
 function getLyricsFromVideo(url) {
     return new Promise((resolve, reject) => {
         const args = [
@@ -1311,7 +1236,7 @@ const app = express();
 const port = process.env.PORT || 10000;
 
 app.get('/', (req, res) => {
-    res.send('🎵 @Mp3titkok_bot is running! (Vernux Project)');
+    res.send('🎵 @Mp3titkok_bot is running! (Vernux Project - Optimized for Render)');
 });
 
 app.listen(port, '0.0.0.0', () => {
@@ -1320,7 +1245,7 @@ app.listen(port, '0.0.0.0', () => {
 
 console.log('✅ @Mp3titkok_bot siap!');
 console.log('📌 TikTok: Hantar link → MP3 | /mp4 [link] → MP4');
-console.log('📌 YouTube: /ytmp3 [link] → MP3 | /ytmp4 [link] → MP4');
+console.log('📌 YouTube: /ytmp3 [link] → MP3 | /ytmp4 [link] → MP4 (API - CEPAT!)');
 console.log('📌 URL Checker: /check [url] → Check malware/phishing');
 console.log('📱 IQC: /iqc "quote" | "sender" | "time" | "battery"');
 console.log('🎵 Lyrics: /lyrics [judul lagu] → Cari lirik (yt-dlp)');
